@@ -4,7 +4,8 @@ export interface KeywordItem {
   mobileVolume: number;
   totalVolume: number;
   cpc: number;
-  totalDocCount?: number;  // 네이버 검색 API 연결 시 활성화
+  totalDocCount: number;
+  saturation: number;
   competition: number;
   commercialIntent: number;
   blogRatio: number;

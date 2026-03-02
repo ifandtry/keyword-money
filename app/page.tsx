@@ -210,6 +210,20 @@ export default function Home() {
                         <p className="text-sm text-muted-foreground">총검색량</p>
                         <p className="text-lg font-semibold">{seedItem.totalVolume.toLocaleString()}</p>
                       </div>
+                      {seedItem.totalDocCount > 0 && (
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground">총문서수</p>
+                          <p className="text-lg font-semibold text-muted-foreground">{seedItem.totalDocCount.toLocaleString()}</p>
+                        </div>
+                      )}
+                      {seedItem.totalDocCount > 0 && (
+                        <div className="text-center">
+                          <p className="text-sm text-muted-foreground">포화도</p>
+                          <p className={`text-lg font-semibold ${seedItem.saturation < 5 ? "text-green-600" : seedItem.saturation > 50 ? "text-red-500" : ""}`}>
+                            {seedItem.saturation.toFixed(1)}
+                          </p>
+                        </div>
+                      )}
                       <div className="text-center">
                         <p className="text-sm text-muted-foreground">CPC</p>
                         <p className="text-lg font-semibold">{seedItem.cpc.toLocaleString()}원</p>

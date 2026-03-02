@@ -15,37 +15,94 @@ const COMMERCIAL_PATTERNS = [
   "최저가", "쿠폰", "브랜드", "리뷰", "사용기", "효과", "성분",
 ];
 
-// ── 네이버 SERP 크롤링 Provider ──
-// 전략: 상위 10개만 크롤링 (blogRatio, commercialIntent, competition)
-// totalDocCount는 네이버 검색 OpenAPI 연결 시 활성화 예정
+// ── 네이버 검색 OpenAPI로 총문서수 조회 ──
+
+async function fetchBlogTotal(
+  keyword: string,
+  clientId: string,
+  clientSecret: string
+): Promise<number> {
+  const params = new URLSearchParams({ query: keyword, display: "1" });
+  const res = await fetch(
+    `https://openapi.naver.com/v1/search/blog.json?${params.toString()}`,
+    {
+      headers: {
+        "X-Naver-Client-Id": clientId,
+        "X-Naver-Client-Secret": clientSecret,
+      },
+    }
+  );
+
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.total || 0;
+}
+
+// ── 네이버 SERP 크롤링 + 검색 API Provider ──
 
 class NaverSerpProvider implements SerpProvider {
   private userAgent =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  private clientId: string;
+  private clientSecret: string;
+  private hasSearchApi: boolean;
+
+  constructor(clientId?: string, clientSecret?: string) {
+    this.clientId = clientId || "";
+    this.clientSecret = clientSecret || "";
+    this.hasSearchApi = !!(clientId && clientSecret);
+  }
 
   async analyze(keywords: string[]): Promise<SerpData[]> {
     const CRAWL_LIMIT = 10;
     const results: SerpData[] = [];
 
+    // 네이버 검색 API로 전체 키워드 총문서수 조회 (5개씩 batch, API 있을 때만)
+    let docCounts: Map<string, number> = new Map();
+    if (this.hasSearchApi) {
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < keywords.length; i += BATCH_SIZE) {
+        const batch = keywords.slice(i, i + BATCH_SIZE);
+        const counts = await Promise.all(
+          batch.map(async (kw) => {
+            try {
+              const total = await fetchBlogTotal(kw, this.clientId, this.clientSecret);
+              return { keyword: kw, total };
+            } catch {
+              return { keyword: kw, total: 0 };
+            }
+          })
+        );
+        counts.forEach((c) => docCounts.set(c.keyword, c.total));
+        if (i + BATCH_SIZE < keywords.length) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+      console.log(`[SERP] Fetched blog totals for ${keywords.length} keywords via Naver Search API`);
+    }
+
+    // SERP 크롤링 (상위 10개만)
     for (let i = 0; i < keywords.length; i++) {
+      const totalDocCount = docCounts.get(keywords[i]) || 0;
+
       if (i < CRAWL_LIMIT) {
         try {
-          const data = await this.crawlKeyword(keywords[i]);
+          const data = await this.crawlKeyword(keywords[i], totalDocCount);
           results.push(data);
         } catch (error) {
           console.error(`SERP crawl failed for "${keywords[i]}":`, error);
-          results.push(this.estimateFromKeyword(keywords[i]));
+          results.push(this.estimateFromKeyword(keywords[i], totalDocCount));
         }
         await new Promise((r) => setTimeout(r, 800 + Math.random() * 700));
       } else {
-        results.push(this.estimateFromKeyword(keywords[i]));
+        results.push(this.estimateFromKeyword(keywords[i], totalDocCount));
       }
     }
 
     return results;
   }
 
-  private async crawlKeyword(keyword: string): Promise<SerpData> {
+  private async crawlKeyword(keyword: string, totalDocCount: number): Promise<SerpData> {
     const params = new URLSearchParams({
       where: "blog",
       query: keyword,
@@ -70,11 +127,11 @@ class NaverSerpProvider implements SerpProvider {
     const commercialIntent = this.analyzeCommercialIntent(keyword, html);
     const competition = this.analyzeCompetition(keyword, html);
 
-    console.log(`[SERP] "${keyword}" → blogRatio=${blogRatio}, ci=${commercialIntent}, comp=${competition}`);
+    console.log(`[SERP] "${keyword}" → docs=${totalDocCount.toLocaleString()}, blogRatio=${blogRatio}, comp=${competition}`);
 
     return {
       keyword,
-      totalDocCount: 0,
+      totalDocCount,
       blogPostCount: 0,
       blogRatio,
       commercialIntent,
@@ -126,7 +183,6 @@ class NaverSerpProvider implements SerpProvider {
     if (keyword.length <= 4) score += 0.2;
     else if (keyword.length <= 8) score += 0.1;
 
-    // 페이지네이션 깊이로 경쟁도 추정
     const hasNext = html.includes("btn_next");
     const hasPagination = html.includes("sc_page");
     if (hasNext) score += 0.3;
@@ -135,13 +191,13 @@ class NaverSerpProvider implements SerpProvider {
     return Number(Math.min(score + 0.05, 1).toFixed(2));
   }
 
-  private estimateFromKeyword(keyword: string): SerpData {
+  private estimateFromKeyword(keyword: string, totalDocCount: number): SerpData {
     const hasCommercial = COMMERCIAL_PATTERNS.some((p) => keyword.includes(p));
     const hash = simpleHash(keyword);
 
     return {
       keyword,
-      totalDocCount: 0,
+      totalDocCount,
       blogPostCount: 0,
       blogRatio: Number(((hash % 60) / 100 + 0.2).toFixed(2)),
       commercialIntent: Number(
@@ -175,11 +231,19 @@ class MockSerpProvider implements SerpProvider {
 // ── Factory ──
 
 export function createSerpProvider(): SerpProvider {
+  const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
+  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
+
   if (process.env.DISABLE_SERP_CRAWLING === "true") {
     console.log("[SerpProvider] Using Mock (crawling disabled)");
     return new MockSerpProvider();
   }
 
-  console.log("[SerpProvider] Using Naver SERP Crawler");
-  return new NaverSerpProvider();
+  if (clientId && clientSecret) {
+    console.log("[SerpProvider] Using Naver SERP Crawler + Search API (blog total)");
+  } else {
+    console.log("[SerpProvider] Using Naver SERP Crawler (no Search API keys)");
+  }
+
+  return new NaverSerpProvider(clientId, clientSecret);
 }

@@ -12,17 +12,33 @@ function calculateGrade(score: number): KeywordItem["grade"] {
   return "D";
 }
 
+// 포화도: 총문서수 / 월간 검색량 — 낮을수록 블루오션
+function calculateSaturation(
+  totalDocCount: number,
+  totalVolume: number
+): number {
+  if (totalVolume === 0) return 999;
+  return Number((totalDocCount / totalVolume).toFixed(1));
+}
+
 function generateReason(params: {
   volumeScore: number;
   cpcScore: number;
   commercialIntent: number;
   blogRatio: number;
   competition: number;
+  saturation: number;
+  hasDocs: boolean;
 }): string {
   const parts: string[] = [];
 
   if (params.volumeScore > 0.7) parts.push("검색량 높음");
   else if (params.volumeScore < 0.3) parts.push("검색량 낮음");
+
+  if (params.hasDocs) {
+    if (params.saturation < 5) parts.push("블루오션(문서 적음)");
+    else if (params.saturation > 50) parts.push("레드오션(문서 많음)");
+  }
 
   if (params.cpcScore > 0.7) parts.push("광고단가 높음");
   if (params.commercialIntent > 0.6) parts.push("구매의도 강함");
@@ -39,14 +55,32 @@ export function calculateProfitScore(
 ): KeywordItem {
   const volumeScore = normalize(volume.totalVolume, 0, 10000);
   const cpcScore = normalize(volume.cpc, 0, 3000);
+  const hasDocs = serp.totalDocCount > 0;
+  const saturation = hasDocs
+    ? calculateSaturation(serp.totalDocCount, volume.totalVolume)
+    : 0;
 
-  // 수익점수 공식 (문서수 데이터 추가 시 포화도 가중치 복원 예정)
-  const rawScore =
-    volumeScore * 0.3 +
-    cpcScore * 0.25 +
-    serp.commercialIntent * 0.2 +
-    serp.blogRatio * 0.1 +
-    (1 - serp.competition) * 0.15;
+  let rawScore: number;
+  if (hasDocs) {
+    // 포화도 포함 공식: 포화도 낮을수록(블루오션) 점수 높음
+    // saturation 범위: 0~200+ → 역정규화 (0~100 기준)
+    const saturationScore = 1 - normalize(saturation, 0, 100);
+    rawScore =
+      volumeScore * 0.2 +
+      saturationScore * 0.25 +
+      cpcScore * 0.2 +
+      serp.commercialIntent * 0.15 +
+      serp.blogRatio * 0.1 +
+      (1 - serp.competition) * 0.1;
+  } else {
+    // 문서수 없을 때
+    rawScore =
+      volumeScore * 0.3 +
+      cpcScore * 0.25 +
+      serp.commercialIntent * 0.2 +
+      serp.blogRatio * 0.1 +
+      (1 - serp.competition) * 0.15;
+  }
 
   const profitScore = Math.round(Math.max(0, Math.min(100, rawScore * 100)));
   const grade = calculateGrade(profitScore);
@@ -56,6 +90,8 @@ export function calculateProfitScore(
     commercialIntent: serp.commercialIntent,
     blogRatio: serp.blogRatio,
     competition: serp.competition,
+    saturation,
+    hasDocs,
   });
 
   return {
@@ -64,6 +100,8 @@ export function calculateProfitScore(
     mobileVolume: volume.mobileVolume,
     totalVolume: volume.totalVolume,
     cpc: volume.cpc,
+    totalDocCount: serp.totalDocCount,
+    saturation,
     competition: serp.competition,
     commercialIntent: serp.commercialIntent,
     blogRatio: serp.blogRatio,

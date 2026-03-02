@@ -33,7 +33,7 @@ interface Props {
   onOpenTagModal: () => void;
 }
 
-type SortKey = "profitScore" | "totalVolume" | "cpc" | "competition";
+type SortKey = "profitScore" | "totalVolume" | "totalDocCount" | "saturation" | "cpc" | "competition";
 
 const gradeColors: Record<string, string> = {
   S: "bg-yellow-500 text-black hover:bg-yellow-500",
@@ -52,16 +52,16 @@ export function KeywordTable({
   const [sortKey, setSortKey] = useState<SortKey>("profitScore");
 
   const sorted = [...items].sort((a, b) => {
-    if (sortKey === "competition") return a[sortKey] - b[sortKey];
+    if (sortKey === "competition" || sortKey === "saturation") return a[sortKey] - b[sortKey];
     return b[sortKey] - a[sortKey];
   });
 
   const handleCsvDownload = () => {
-    const header = "키워드,PC검색량,모바일검색량,총검색량,CPC,경쟁도,블로그비율,상업의도,수익점수,등급,근거\n";
+    const header = "키워드,PC검색량,모바일검색량,총검색량,총문서수,포화도,CPC,경쟁도,블로그비율,상업의도,수익점수,등급,근거\n";
     const rows = sorted
       .map(
         (item) =>
-          `"${item.keyword}",${item.pcVolume},${item.mobileVolume},${item.totalVolume},${item.cpc},${(item.competition * 100).toFixed(0)}%,${(item.blogRatio * 100).toFixed(0)}%,${(item.commercialIntent * 100).toFixed(0)}%,${item.profitScore},${item.grade},"${item.reason}"`
+          `"${item.keyword}",${item.pcVolume},${item.mobileVolume},${item.totalVolume},${item.totalDocCount},${item.saturation},${item.cpc},${(item.competition * 100).toFixed(0)}%,${(item.blogRatio * 100).toFixed(0)}%,${(item.commercialIntent * 100).toFixed(0)}%,${item.profitScore},${item.grade},"${item.reason}"`
       )
       .join("\n");
     const blob = new Blob(["\uFEFF" + header + rows], {
@@ -100,6 +100,8 @@ export function KeywordTable({
             <SelectContent>
               <SelectItem value="profitScore">수익점수순</SelectItem>
               <SelectItem value="totalVolume">검색량순</SelectItem>
+              <SelectItem value="totalDocCount">문서수순</SelectItem>
+              <SelectItem value="saturation">포화도순</SelectItem>
               <SelectItem value="cpc">CPC순</SelectItem>
               <SelectItem value="competition">경쟁도순</SelectItem>
             </SelectContent>
@@ -140,6 +142,8 @@ export function KeywordTable({
               <TableHead className="text-right">PC</TableHead>
               <TableHead className="text-right">모바일</TableHead>
               <TableHead className="text-right">총검색량</TableHead>
+              <TableHead className="text-right">총문서수</TableHead>
+              <TableHead className="text-right">포화도</TableHead>
               <TableHead className="text-right">CPC</TableHead>
               <TableHead className="text-right">경쟁도</TableHead>
               <TableHead className="text-right">블로그비율</TableHead>
@@ -176,6 +180,25 @@ export function KeywordTable({
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {item.totalVolume.toLocaleString()}
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {item.totalDocCount > 0 ? item.totalDocCount.toLocaleString() : "-"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {item.totalDocCount > 0 ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={item.saturation < 5 ? "text-green-600 font-medium" : item.saturation > 50 ? "text-red-500" : ""}>
+                          {item.saturation.toFixed(1)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {item.saturation < 5 ? "블루오션! 문서 대비 검색 많음" :
+                         item.saturation < 20 ? "기회 있음" :
+                         item.saturation < 50 ? "보통 경쟁" : "레드오션 (문서 과포화)"}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : "-"}
                 </TableCell>
                 <TableCell className="text-right">
                   {item.cpc.toLocaleString()}원
