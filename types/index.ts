@@ -19,6 +19,7 @@ export interface AnalyzeRequest {
 }
 
 export interface AnalyzeResponse {
+  seedItem: KeywordItem | null;
   items: KeywordItem[];
   seed: string;
   analyzedAt: string;

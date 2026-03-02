@@ -177,12 +177,8 @@ export default function Home() {
 
       {/* 결과 */}
       {analyzeData && !analyzing && (() => {
-        const seedItem = analyzeData.items.find(
-          (item) => item.keyword === analyzeData.seed
-        );
-        const relatedItems = analyzeData.items.filter(
-          (item) => item.keyword !== analyzeData.seed
-        );
+        const seedItem = analyzeData.seedItem;
+        const relatedItems = analyzeData.items;
         return (
           <section className="container mx-auto px-4 pb-8 space-y-8">
             {/* 시드 키워드 카드 */}
