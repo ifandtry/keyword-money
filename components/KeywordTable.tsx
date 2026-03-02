@@ -36,11 +36,11 @@ interface Props {
 type SortKey = "profitScore" | "totalVolume" | "totalDocCount" | "saturation";
 
 const gradeColors: Record<string, string> = {
-  S: "bg-yellow-500 text-black hover:bg-yellow-500",
-  A: "bg-green-500 text-white hover:bg-green-500",
-  B: "bg-blue-500 text-white hover:bg-blue-500",
-  C: "bg-gray-500 text-white hover:bg-gray-500",
-  D: "bg-red-500 text-white hover:bg-red-500",
+  S: "bg-gradient-to-r from-amber-400 to-yellow-500 text-black hover:from-amber-500 hover:to-yellow-600",
+  A: "bg-emerald-500 text-white hover:bg-emerald-600",
+  B: "bg-blue-500 text-white hover:bg-blue-600",
+  C: "bg-slate-400 text-white hover:bg-slate-500",
+  D: "bg-red-400 text-white hover:bg-red-500",
 };
 
 export function KeywordTable({
@@ -152,7 +152,7 @@ export function KeywordTable({
               <TableRow
                 key={item.keyword}
                 className={
-                  selectedKeywords.has(item.keyword) ? "bg-muted/50" : ""
+                  selectedKeywords.has(item.keyword) ? "bg-primary/5" : ""
                 }
                 onClick={() => onToggleKeyword(item.keyword)}
                 style={{ cursor: "pointer" }}

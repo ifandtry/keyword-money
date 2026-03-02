@@ -27,7 +27,7 @@ interface Props {
 const YEAR_COLORS: Record<string, string> = {
   "2024": "#94a3b8",  // slate
   "2025": "#60a5fa",  // blue
-  "2026": "#f97316",  // orange (현재)
+  "2026": "#d97706",  // amber-600 (골드 머니 테마)
 };
 
 function formatVolume(value: number): string {
@@ -71,7 +71,7 @@ export function TrendChart({ keyword, totalVolume }: Props) {
   if (error) return null;
 
   return (
-    <Card>
+    <Card className="border-primary/10">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg">월별 검색 트렌드</CardTitle>
       </CardHeader>

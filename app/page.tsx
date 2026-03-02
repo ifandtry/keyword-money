@@ -23,11 +23,11 @@ import { Search, TrendingUp, Wand2, Zap } from "lucide-react";
 import { Toaster, toast } from "sonner";
 
 const gradeColors: Record<string, string> = {
-  S: "bg-yellow-500 text-black hover:bg-yellow-500",
-  A: "bg-green-500 text-white hover:bg-green-500",
-  B: "bg-blue-500 text-white hover:bg-blue-500",
-  C: "bg-gray-500 text-white hover:bg-gray-500",
-  D: "bg-red-500 text-white hover:bg-red-500",
+  S: "bg-gradient-to-r from-amber-400 to-yellow-500 text-black hover:from-amber-500 hover:to-yellow-600",
+  A: "bg-emerald-500 text-white hover:bg-emerald-600",
+  B: "bg-blue-500 text-white hover:bg-blue-600",
+  C: "bg-slate-400 text-white hover:bg-slate-500",
+  D: "bg-red-400 text-white hover:bg-red-500",
 };
 
 const FALLBACK_KEYWORDS = [
@@ -115,27 +115,30 @@ export default function Home() {
       <Toaster richColors />
 
       {/* Hero */}
-      <section className="container mx-auto px-4 pt-16 pb-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-          키워드머니
+      <section className="relative overflow-hidden container mx-auto px-4 pt-20 pb-12 text-center">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_0%,oklch(0.78_0.16_85/0.08),transparent_50%)]" />
+
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+          키워드<span className="text-gradient-gold">머니</span>
         </h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <p className="mt-4 text-lg text-muted-foreground max-w-md mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
           돈이 되는 키워드를 AI가 찾아드립니다
         </p>
 
         {/* 검색 */}
-        <div className="mx-auto mt-8 flex max-w-xl gap-2">
+        <div className="mx-auto mt-8 flex max-w-xl gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
           <Input
             placeholder="수익성 높은 키워드를 검색하세요"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-            className="h-12 text-base"
+            className="h-12 text-base shadow-lg shadow-primary/5 border-primary/20 focus-visible:ring-primary/30"
           />
           <Button
             onClick={() => handleAnalyze()}
             disabled={analyzing}
-            className="h-12 px-6"
+            className="h-12 px-6 shadow-lg shadow-primary/20"
           >
             {analyzing ? (
               "분석중..."
@@ -148,7 +151,11 @@ export default function Home() {
         </div>
 
         {/* 인기 검색어 */}
-        <div className="mx-auto mt-3 flex max-w-xl flex-wrap justify-center gap-2">
+        <div className="mx-auto mt-4 flex max-w-xl flex-wrap justify-center gap-2 animate-in fade-in duration-500 delay-500">
+          <span className="text-xs text-muted-foreground/60 self-center mr-1">
+            <TrendingUp className="inline h-3 w-3 mr-0.5" />
+            인기
+          </span>
           {trendingKeywords.map((ex) => (
             <button
               key={ex}
@@ -156,14 +163,14 @@ export default function Home() {
                 setKeyword(ex);
                 handleAnalyze(ex);
               }}
-              className="rounded-full border px-3 py-1 text-sm text-muted-foreground hover:bg-muted transition-colors"
+              className="rounded-full border border-border px-3 py-1 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/5 transition-all duration-200"
             >
               {ex}
             </button>
           ))}
         </div>
 
-        <p className="mt-3 text-sm text-muted-foreground">
+        <p className="mt-3 text-xs text-muted-foreground/60">
           오늘 남은 횟수: {remaining}/5
         </p>
       </section>
@@ -200,7 +207,7 @@ export default function Home() {
                 <h2 className="mb-3 text-2xl font-semibold">
                   시드 키워드
                 </h2>
-                <Card className="border-primary/30 bg-primary/5">
+                <Card className="border-primary/30 bg-primary/5 glow-gold animate-in fade-in zoom-in-95 duration-300">
                   <CardContent className="pt-6">
                     <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
                       <div>
@@ -253,7 +260,7 @@ export default function Home() {
             )}
 
             {/* 연관 키워드 테이블 */}
-            <div>
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 delay-100">
               <h2 className="mb-3 text-2xl font-semibold">
                 연관 키워드 ({relatedItems.length}개)
               </h2>
@@ -278,41 +285,25 @@ export default function Home() {
 
       {/* 기능 소개 (결과 없을 때) */}
       {!analyzeData && !analyzing && (
-        <section className="container mx-auto grid gap-4 px-4 pb-16 sm:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <TrendingUp className="h-8 w-8 text-primary" />
-              <CardTitle>수익성 분석</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                검색량, CPC, 경쟁도를 종합해 수익 가능성을 점수로 제시합니다.
-              </CardDescription>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Wand2 className="h-8 w-8 text-primary" />
-              <CardTitle>블로그 글 변환</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                기존 블로그 글에 수익 키워드를 자연스럽게 삽입해 &ldquo;돈 되는
-                글&rdquo;로 변환합니다.
-              </CardDescription>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Zap className="h-8 w-8 text-primary" />
-              <CardTitle>태그 & CSV</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                키워드를 다양한 태그 형식으로 복사하고 CSV로 내보냅니다.
-              </CardDescription>
-            </CardContent>
-          </Card>
+        <section className="container mx-auto grid gap-6 px-4 pb-16 sm:grid-cols-3">
+          {[
+            { icon: TrendingUp, title: "수익성 분석", desc: "검색량과 문서 포화도를 종합해 수익 가능성을 점수로 제시합니다.", gradient: "from-amber-500/10 to-yellow-500/5", delay: "delay-0" },
+            { icon: Wand2, title: "블로그 글 변환", desc: "기존 블로그 글에 수익 키워드를 자연스럽게 삽입해 돈 되는 글로 변환합니다.", gradient: "from-emerald-500/10 to-green-500/5", delay: "delay-100" },
+            { icon: Zap, title: "태그 & CSV", desc: "키워드를 다양한 태그 형식으로 복사하고 CSV로 내보냅니다.", gradient: "from-blue-500/10 to-cyan-500/5", delay: "delay-200" },
+          ].map(({ icon: Icon, title, desc, gradient, delay }) => (
+            <Card key={title} className={`group relative overflow-hidden border-border/50 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 animate-in fade-in slide-in-from-bottom-4 duration-500 ${delay}`}>
+              <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+              <CardHeader className="relative">
+                <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                  <Icon className="h-6 w-6 text-primary" />
+                </div>
+                <CardTitle>{title}</CardTitle>
+              </CardHeader>
+              <CardContent className="relative">
+                <CardDescription>{desc}</CardDescription>
+              </CardContent>
+            </Card>
+          ))}
         </section>
       )}
 
