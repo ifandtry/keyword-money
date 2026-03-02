@@ -33,7 +33,7 @@ interface Props {
   onOpenTagModal: () => void;
 }
 
-type SortKey = "profitScore" | "totalVolume" | "totalDocCount" | "saturation" | "cpc" | "competition";
+type SortKey = "profitScore" | "totalVolume" | "totalDocCount" | "saturation";
 
 const gradeColors: Record<string, string> = {
   S: "bg-yellow-500 text-black hover:bg-yellow-500",
@@ -52,16 +52,16 @@ export function KeywordTable({
   const [sortKey, setSortKey] = useState<SortKey>("profitScore");
 
   const sorted = [...items].sort((a, b) => {
-    if (sortKey === "competition" || sortKey === "saturation") return a[sortKey] - b[sortKey];
+    if (sortKey === "saturation") return a[sortKey] - b[sortKey];
     return b[sortKey] - a[sortKey];
   });
 
   const handleCsvDownload = () => {
-    const header = "키워드,PC검색량,모바일검색량,총검색량,총문서수,포화도,CPC,경쟁도,블로그비율,상업의도,수익점수,등급,근거\n";
+    const header = "키워드,PC검색량,모바일검색량,총검색량,총문서수,포화도,수익점수,등급,근거\n";
     const rows = sorted
       .map(
         (item) =>
-          `"${item.keyword}",${item.pcVolume},${item.mobileVolume},${item.totalVolume},${item.totalDocCount},${item.saturation},${item.cpc},${(item.competition * 100).toFixed(0)}%,${(item.blogRatio * 100).toFixed(0)}%,${(item.commercialIntent * 100).toFixed(0)}%,${item.profitScore},${item.grade},"${item.reason}"`
+          `"${item.keyword}",${item.pcVolume},${item.mobileVolume},${item.totalVolume},${item.totalDocCount},${item.saturation},${item.profitScore},${item.grade},"${item.reason}"`
       )
       .join("\n");
     const blob = new Blob(["\uFEFF" + header + rows], {
@@ -102,8 +102,6 @@ export function KeywordTable({
               <SelectItem value="totalVolume">검색량순</SelectItem>
               <SelectItem value="totalDocCount">문서수순</SelectItem>
               <SelectItem value="saturation">포화도순</SelectItem>
-              <SelectItem value="cpc">CPC순</SelectItem>
-              <SelectItem value="competition">경쟁도순</SelectItem>
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground">
@@ -144,9 +142,6 @@ export function KeywordTable({
               <TableHead className="text-right">총검색량</TableHead>
               <TableHead className="text-right">총문서수</TableHead>
               <TableHead className="text-right">포화도</TableHead>
-              <TableHead className="text-right">CPC</TableHead>
-              <TableHead className="text-right">경쟁도</TableHead>
-              <TableHead className="text-right">블로그비율</TableHead>
               <TableHead className="text-right">수익점수</TableHead>
               <TableHead className="text-center">등급</TableHead>
               <TableHead>근거</TableHead>
@@ -199,15 +194,6 @@ export function KeywordTable({
                       </TooltipContent>
                     </Tooltip>
                   ) : "-"}
-                </TableCell>
-                <TableCell className="text-right">
-                  {item.cpc.toLocaleString()}원
-                </TableCell>
-                <TableCell className="text-right">
-                  {(item.competition * 100).toFixed(0)}%
-                </TableCell>
-                <TableCell className="text-right">
-                  {(item.blogRatio * 100).toFixed(0)}%
                 </TableCell>
                 <TableCell className="text-right font-bold">
                   <Tooltip>

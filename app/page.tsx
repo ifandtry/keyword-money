@@ -225,14 +225,6 @@ export default function Home() {
                         </div>
                       )}
                       <div className="text-center">
-                        <p className="text-sm text-muted-foreground">CPC</p>
-                        <p className="text-lg font-semibold">{seedItem.cpc.toLocaleString()}원</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">경쟁도</p>
-                        <p className="text-lg font-semibold">{(seedItem.competition * 100).toFixed(0)}%</p>
-                      </div>
-                      <div className="text-center">
                         <p className="text-sm text-muted-foreground">수익점수</p>
                         <div className="flex items-center gap-2">
                           <p className="text-2xl font-bold">{seedItem.profitScore}</p>

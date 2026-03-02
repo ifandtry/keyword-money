@@ -23,10 +23,6 @@ function calculateSaturation(
 
 function generateReason(params: {
   volumeScore: number;
-  cpcScore: number;
-  commercialIntent: number;
-  blogRatio: number;
-  competition: number;
   saturation: number;
   hasDocs: boolean;
 }): string {
@@ -37,14 +33,9 @@ function generateReason(params: {
 
   if (params.hasDocs) {
     if (params.saturation < 5) parts.push("블루오션(문서 적음)");
+    else if (params.saturation < 20) parts.push("기회 있음");
     else if (params.saturation > 50) parts.push("레드오션(문서 많음)");
   }
-
-  if (params.cpcScore > 0.7) parts.push("광고단가 높음");
-  if (params.commercialIntent > 0.6) parts.push("구매의도 강함");
-  if (params.blogRatio > 0.5) parts.push("블로그 노출 유리");
-  if (params.competition < 0.3) parts.push("경쟁 낮음");
-  else if (params.competition > 0.7) parts.push("경쟁 치열");
 
   return parts.length > 0 ? parts.join(", ") : "보통 수준";
 }
@@ -54,7 +45,6 @@ export function calculateProfitScore(
   serp: SerpData
 ): KeywordItem {
   const volumeScore = normalize(volume.totalVolume, 0, 10000);
-  const cpcScore = normalize(volume.cpc, 0, 3000);
   const hasDocs = serp.totalDocCount > 0;
   const saturation = hasDocs
     ? calculateSaturation(serp.totalDocCount, volume.totalVolume)
@@ -62,34 +52,20 @@ export function calculateProfitScore(
 
   let rawScore: number;
   if (hasDocs) {
-    // 포화도 포함 공식: 포화도 낮을수록(블루오션) 점수 높음
-    // saturation 범위: 0~200+ → 역정규화 (0~100 기준)
+    // 포화도 낮을수록(블루오션) 점수 높음
     const saturationScore = 1 - normalize(saturation, 0, 100);
     rawScore =
-      volumeScore * 0.2 +
-      saturationScore * 0.25 +
-      cpcScore * 0.2 +
-      serp.commercialIntent * 0.15 +
-      serp.blogRatio * 0.1 +
-      (1 - serp.competition) * 0.1;
+      volumeScore * 0.4 +
+      saturationScore * 0.6;
   } else {
-    // 문서수 없을 때
-    rawScore =
-      volumeScore * 0.3 +
-      cpcScore * 0.25 +
-      serp.commercialIntent * 0.2 +
-      serp.blogRatio * 0.1 +
-      (1 - serp.competition) * 0.15;
+    // 문서수 없을 때 검색량만으로 판단
+    rawScore = volumeScore;
   }
 
   const profitScore = Math.round(Math.max(0, Math.min(100, rawScore * 100)));
   const grade = calculateGrade(profitScore);
   const reason = generateReason({
     volumeScore,
-    cpcScore,
-    commercialIntent: serp.commercialIntent,
-    blogRatio: serp.blogRatio,
-    competition: serp.competition,
     saturation,
     hasDocs,
   });
