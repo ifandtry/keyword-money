@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { KeywordTable } from "@/components/KeywordTable";
 import { TagModal } from "@/components/TagModal";
 import { TransformSection } from "@/components/TransformSection";
+import { TrendChart } from "@/components/TrendChart";
 import { useUsageLimit } from "@/hooks/useUsageLimit";
 import { AnalyzeResponse } from "@/types";
 import { Search, TrendingUp, Wand2, Zap } from "lucide-react";
@@ -232,6 +233,11 @@ export default function Home() {
                   </CardContent>
                 </Card>
               </div>
+            )}
+
+            {/* 월별 검색 트렌드 */}
+            {analyzeData.seed && (
+              <TrendChart keyword={analyzeData.seed} />
             )}
 
             {/* 연관 키워드 테이블 */}
