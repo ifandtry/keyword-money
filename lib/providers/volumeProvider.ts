@@ -1,0 +1,208 @@
+import { VolumeData, VolumeProvider } from "@/types";
+import crypto from "crypto";
+
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+}
+
+// ── 네이버 검색광고 API Provider ──
+
+function generateSignature(
+  timestamp: string,
+  method: string,
+  path: string,
+  secretKey: string
+): string {
+  const message = `${timestamp}.${method}.${path}`;
+  return crypto
+    .createHmac("sha256", secretKey)
+    .update(message)
+    .digest("base64");
+}
+
+interface NaverKeywordResult {
+  relKeyword: string;
+  monthlyPcQcCnt: number | string;
+  monthlyMobileQcCnt: number | string;
+  monthlyAvePcClkCnt: number | string;
+  monthlyAveMobileClkCnt: number | string;
+  monthlyAvePcCtr: number | string;
+  monthlyAveMobileCtr: number | string;
+  plAvgDepth: number | string;
+  compIdx: string;
+}
+
+class NaverAdsVolumeProvider implements VolumeProvider {
+  private customerId: string;
+  private apiKey: string;
+  private secretKey: string;
+  private baseUrl = "https://api.searchad.naver.com";
+
+  constructor(customerId: string, apiKey: string, secretKey: string) {
+    this.customerId = customerId;
+    this.apiKey = apiKey;
+    this.secretKey = secretKey;
+  }
+
+  /**
+   * 시드 키워드 1개를 보내면 네이버 API가 연관키워드 + 검색량을 한꺼번에 반환.
+   * keywords 배열의 첫 번째를 시드로 사용.
+   */
+  async getVolume(keywords: string[]): Promise<VolumeData[]> {
+    const seed = keywords[0];
+    if (!seed) return [];
+
+    try {
+      // 1차: 원본 시드로 시도
+      let results = await this.fetchKeywordTool(seed);
+
+      // 2차: 결과 없으면 공백 제거 버전으로 재시도
+      if (results.length === 0 && seed.includes(" ")) {
+        const noSpace = seed.replace(/\s+/g, "");
+        console.log(`[NaverAds] Retrying without spaces: "${noSpace}"`);
+        results = await this.fetchKeywordTool(noSpace);
+      }
+
+      // 3차: 여전히 없으면 핵심 명사(첫 단어 or 가장 긴 단어)로 재시도
+      if (results.length === 0 && seed.includes(" ")) {
+        const words = seed.split(/\s+/);
+        const coreWord = words.reduce((a, b) => (a.length >= b.length ? a : b));
+        if (coreWord !== seed && coreWord !== seed.replace(/\s+/g, "")) {
+          console.log(`[NaverAds] Retrying with core word: "${coreWord}"`);
+          results = await this.fetchKeywordTool(coreWord);
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error("Naver Ads API failed, returning empty:", error);
+      return [];
+    }
+  }
+
+  private async fetchKeywordTool(seed: string): Promise<VolumeData[]> {
+    const path = "/keywordstool";
+    const method = "GET";
+    const timestamp = String(Date.now());
+    const signature = generateSignature(
+      timestamp,
+      method,
+      path,
+      this.secretKey
+    );
+
+    const params = new URLSearchParams({
+      hintKeywords: seed,
+      showDetail: "1",
+    });
+
+    const url = `${this.baseUrl}${path}?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        "X-Timestamp": timestamp,
+        "X-API-KEY": this.apiKey,
+        "X-Customer": this.customerId,
+        "X-Signature": signature,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `Naver Ads API error (${response.status}):`,
+        errorText
+      );
+      return [];
+    }
+
+    const data = await response.json();
+    const keywordList: NaverKeywordResult[] = data.keywordList || [];
+
+    console.log(
+      `[NaverAds] Seed "${seed}" → ${keywordList.length} keywords returned`
+    );
+
+    return keywordList.map((item) => {
+      const pcVol = this.parseCount(item.monthlyPcQcCnt);
+      const mobileVol = this.parseCount(item.monthlyMobileQcCnt);
+      const cpc = this.estimateCpc(item);
+
+      return {
+        keyword: item.relKeyword,
+        pcVolume: pcVol,
+        mobileVolume: mobileVol,
+        totalVolume: pcVol + mobileVol,
+        cpc,
+      };
+    });
+  }
+
+  private parseCount(value: number | string): number {
+    if (typeof value === "number") return value;
+    if (value === "< 10") return 5;
+    const parsed = parseInt(String(value).replace(/[^0-9]/g, ""), 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  private estimateCpc(item: NaverKeywordResult): number {
+    const compIdx = String(item.compIdx);
+    const pcClicks = this.parseCount(item.monthlyAvePcClkCnt);
+    const mobileClicks = this.parseCount(item.monthlyAveMobileClkCnt);
+    const totalClicks = pcClicks + mobileClicks;
+
+    let baseCpc: number;
+    if (compIdx === "높음") baseCpc = 1500;
+    else if (compIdx === "중간") baseCpc = 800;
+    else baseCpc = 300;
+
+    if (totalClicks > 1000) baseCpc *= 1.3;
+    else if (totalClicks > 500) baseCpc *= 1.1;
+
+    return Math.round(baseCpc);
+  }
+}
+
+// ── Mock Provider (fallback) ──
+
+class MockVolumeProvider implements VolumeProvider {
+  async getVolume(keywords: string[]): Promise<VolumeData[]> {
+    return keywords.map((keyword) => {
+      const total =
+        Math.round((500 + (simpleHash(keyword) % 9500)) / 10) * 10;
+      const mobileRatio = 0.6 + (simpleHash(keyword + "_mr") % 26) / 100;
+      const mobileVolume = Math.round((total * mobileRatio) / 10) * 10;
+      const pcVolume = total - mobileVolume;
+      return {
+        keyword,
+        pcVolume,
+        mobileVolume,
+        totalVolume: total,
+        cpc: 100 + (simpleHash(keyword + "_cpc") % 2900),
+      };
+    });
+  }
+}
+
+// ── Factory ──
+
+export function createVolumeProvider(): VolumeProvider {
+  const customerId = process.env.NAVER_ADS_CUSTOMER_ID;
+  const apiKey = process.env.NAVER_ADS_API_KEY;
+  const secretKey = process.env.NAVER_ADS_SECRET_KEY;
+
+  if (customerId && apiKey && secretKey) {
+    console.log("[VolumeProvider] Using Naver Ads API");
+    return new NaverAdsVolumeProvider(customerId, apiKey, secretKey);
+  }
+
+  console.log("[VolumeProvider] Using Mock (no Naver Ads credentials)");
+  return new MockVolumeProvider();
+}
