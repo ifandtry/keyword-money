@@ -20,10 +20,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "네이버 검색 API 키가 설정되지 않았습니다." }, { status: 500 });
     }
 
-    // 최근 12개월 트렌드 조회
+    // 2024년 1월 ~ 현재까지 (3개년 비교용)
     const endDate = new Date();
-    const startDate = new Date();
-    startDate.setFullYear(startDate.getFullYear() - 1);
+    const startDate = new Date("2024-01-01");
 
     const body = {
       startDate: startDate.toISOString().split("T")[0],
@@ -53,20 +52,43 @@ export async function POST(request: NextRequest) {
     const data = await res.json();
     const results: TrendDataPoint[] = data.results?.[0]?.data || [];
 
-    // 마지막 달은 아직 진행 중이라 데이터가 낮으므로 제외
+    // 현재 진행 중인 달 제외
+    const now = new Date();
     const filtered = results.filter((d: TrendDataPoint) => {
       const periodDate = new Date(d.period);
-      const now = new Date();
-      return periodDate.getFullYear() !== now.getFullYear() || periodDate.getMonth() !== now.getMonth();
+      return !(periodDate.getFullYear() === now.getFullYear() && periodDate.getMonth() === now.getMonth());
     });
 
-    const trend = filtered.map((d: TrendDataPoint) => {
+    // 월(1~12) x 연도별로 정리: { month: 1, "2024": 80, "2025": 65, "2026": 40 }
+    const monthMap: Record<number, Record<string, number>> = {};
+    const years = new Set<string>();
+
+    for (const d of filtered) {
       const date = new Date(d.period);
-      const month = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}`;
-      return { month, ratio: Math.round(d.ratio * 10) / 10 };
+      const month = date.getMonth() + 1;
+      const year = String(date.getFullYear());
+      years.add(year);
+
+      if (!monthMap[month]) monthMap[month] = {};
+      monthMap[month][year] = Math.round(d.ratio * 10) / 10;
+    }
+
+    const trend = Array.from({ length: 12 }, (_, i) => {
+      const month = i + 1;
+      const entry: Record<string, string | number> = { month: `${month}월` };
+      for (const year of years) {
+        if (monthMap[month]?.[year] !== undefined) {
+          entry[year] = monthMap[month][year];
+        }
+      }
+      return entry;
     });
 
-    return NextResponse.json({ keyword, trend });
+    return NextResponse.json({
+      keyword,
+      trend,
+      years: Array.from(years).sort(),
+    });
   } catch (error) {
     console.error("Trend API error:", error);
     return NextResponse.json({ error: "트렌드 조회 중 오류 발생" }, { status: 500 });
