@@ -2,6 +2,15 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* 여기어때 잘난체 */
+@font-face {
+  font-family: "Jalnan2";
+  src: url("https://fastly.jsdelivr.net/gh/projectnoonnu/2408-4@1.0/Jalnan2TTF.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -9,6 +18,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-noto-serif-kr);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,71 +58,82 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.99 0.005 85);
+  --radius: 0.75rem;
+  /* 뉴모피즘 베이스: 부드러운 웜 그레이 */
+  --neu-base: #f8f8f8;
+  --neu-light: #ffffff;
+  --neu-dark: #e8e8e8;
+  --neu-base-rgb: 248, 248, 248;
+
+  --background: oklch(0.99 0.002 85);
   --foreground: oklch(0.15 0.02 75);
-  --card: oklch(1 0 0);
+  --card: oklch(0.99 0.002 85);
   --card-foreground: oklch(0.15 0.02 75);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.99 0.002 85);
   --popover-foreground: oklch(0.15 0.02 75);
-  --primary: oklch(0.45 0.12 75);
+  --primary: oklch(0.50 0.14 75);
   --primary-foreground: oklch(0.99 0.01 85);
-  --secondary: oklch(0.97 0.01 80);
+  --secondary: oklch(0.97 0.002 85);
   --secondary-foreground: oklch(0.25 0.05 75);
-  --muted: oklch(0.96 0.01 80);
-  --muted-foreground: oklch(0.50 0.02 75);
-  --accent: oklch(0.96 0.02 80);
+  --muted: oklch(0.96 0.003 85);
+  --muted-foreground: oklch(0.45 0.02 75);
+  --accent: oklch(0.96 0.005 80);
   --accent-foreground: oklch(0.25 0.05 75);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.02 80);
-  --input: oklch(0.91 0.02 80);
+  --border: oklch(0.92 0.005 80);
+  --input: oklch(0.92 0.005 80);
   --ring: oklch(0.60 0.10 75);
   --chart-1: oklch(0.72 0.16 85);
   --chart-2: oklch(0.55 0.12 160);
   --chart-3: oklch(0.60 0.15 45);
   --chart-4: oklch(0.50 0.10 250);
   --chart-5: oklch(0.65 0.18 30);
-  --sidebar: oklch(0.98 0.005 85);
+  --sidebar: oklch(0.99 0.002 85);
   --sidebar-foreground: oklch(0.15 0.02 75);
-  --sidebar-primary: oklch(0.45 0.12 75);
+  --sidebar-primary: oklch(0.50 0.14 75);
   --sidebar-primary-foreground: oklch(0.99 0.01 85);
-  --sidebar-accent: oklch(0.96 0.02 80);
+  --sidebar-accent: oklch(0.96 0.005 80);
   --sidebar-accent-foreground: oklch(0.25 0.05 75);
-  --sidebar-border: oklch(0.91 0.02 80);
+  --sidebar-border: oklch(0.92 0.005 80);
   --sidebar-ring: oklch(0.60 0.10 75);
 }
 
 .dark {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.95 0.01 85);
-  --card: oklch(0.18 0.01 260);
-  --card-foreground: oklch(0.95 0.01 85);
-  --popover: oklch(0.18 0.01 260);
-  --popover-foreground: oklch(0.95 0.01 85);
+  --neu-base: #2d2d35;
+  --neu-light: #3a3a44;
+  --neu-dark: #202028;
+  --neu-base-rgb: 45, 45, 53;
+
+  --background: oklch(0.22 0.01 260);
+  --foreground: oklch(0.92 0.01 85);
+  --card: oklch(0.22 0.01 260);
+  --card-foreground: oklch(0.92 0.01 85);
+  --popover: oklch(0.22 0.01 260);
+  --popover-foreground: oklch(0.92 0.01 85);
   --primary: oklch(0.78 0.15 85);
   --primary-foreground: oklch(0.15 0.02 80);
   --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0.01 85);
-  --muted: oklch(0.22 0.01 260);
+  --secondary-foreground: oklch(0.92 0.01 85);
+  --muted: oklch(0.25 0.01 260);
   --muted-foreground: oklch(0.65 0.03 85);
-  --accent: oklch(0.22 0.02 80);
+  --accent: oklch(0.25 0.02 80);
   --accent-foreground: oklch(0.90 0.08 85);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0.02 85 / 10%);
-  --input: oklch(1 0.02 85 / 15%);
+  --border: oklch(0.28 0.01 260);
+  --input: oklch(0.28 0.01 260);
   --ring: oklch(0.65 0.10 85);
   --chart-1: oklch(0.78 0.15 85);
   --chart-2: oklch(0.70 0.15 160);
   --chart-3: oklch(0.75 0.16 45);
   --chart-4: oklch(0.60 0.15 250);
   --chart-5: oklch(0.70 0.20 30);
-  --sidebar: oklch(0.18 0.01 260);
-  --sidebar-foreground: oklch(0.95 0.01 85);
+  --sidebar: oklch(0.22 0.01 260);
+  --sidebar-foreground: oklch(0.92 0.01 85);
   --sidebar-primary: oklch(0.78 0.15 85);
   --sidebar-primary-foreground: oklch(0.15 0.02 80);
-  --sidebar-accent: oklch(0.22 0.02 80);
+  --sidebar-accent: oklch(0.25 0.02 80);
   --sidebar-accent-foreground: oklch(0.90 0.08 85);
-  --sidebar-border: oklch(1 0.02 85 / 10%);
+  --sidebar-border: oklch(0.28 0.01 260);
   --sidebar-ring: oklch(0.65 0.10 85);
 }
 
@@ -122,17 +143,398 @@
   }
   body {
     @apply bg-background text-foreground;
+    word-break: keep-all;
+    line-height: 1.6;
   }
 }
 
 @layer utilities {
+  /* 뉴모피즘 그래디언트 텍스트 */
   .text-gradient-gold {
-    background: linear-gradient(135deg, oklch(0.78 0.16 85), oklch(0.60 0.18 65));
+    background: linear-gradient(135deg, oklch(0.78 0.16 85), oklch(0.55 0.18 65));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  .glow-gold {
-    box-shadow: 0 0 24px oklch(0.78 0.16 85 / 0.12);
+
+  /* 대담한 실험적 세리프 타이틀 */
+  .title-experimental {
+    font-family: var(--font-noto-serif-kr), "Noto Serif KR", Georgia, serif;
+    font-weight: 900;
+    letter-spacing: -0.06em;
+    line-height: 0.9;
+    text-rendering: geometricPrecision;
   }
+  .title-experimental .title-sub {
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0.08em;
+    opacity: 0.6;
+  }
+
+  /* === 소프트 섀도우 시스템 (토스 스타일) === */
+
+  .neu-raised {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .neu-raised-sm {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .neu-raised-lg {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .neu-pressed {
+    border: none;
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .neu-pressed-sm {
+    border: none;
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .neu-flat {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .neu-glow-gold {
+    border: 1px solid oklch(0.78 0.16 85 / 0.2);
+    box-shadow:
+      0 2px 12px rgba(0, 0, 0, 0.06),
+      0 0 20px oklch(0.78 0.16 85 / 0.1);
+  }
+
+  .neu-button {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    transition: all 0.2s ease;
+  }
+  .neu-button:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+  }
+  .neu-button:active,
+  .neu-button.neu-active {
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+    transform: translateY(0);
+  }
+
+  .neu-inset {
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .neu-divider {
+    border: none;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  .neu-badge {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .neu-tab-active {
+    background: rgba(0, 0, 0, 0.03);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  .neu-tab-inactive {
+    box-shadow: none;
+  }
+  .neu-tab-inactive:hover {
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  /* === 글래스모피즘 === */
+  .glass {
+    background: rgba(var(--neu-base-rgb), 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .glass-overlay {
+    background: rgba(var(--neu-base-rgb), 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* === 대담한 타이포그래피 (잘난체) === */
+  .title-bold-serif {
+    font-family: "Jalnan2", sans-serif;
+    font-weight: normal;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    text-rendering: geometricPrecision;
+    -webkit-text-stroke: 1.5px currentColor;
+    paint-order: stroke fill;
+  }
+
+  /* === 키네틱 타이포그래피: 골드 그래디언트 흐름 === */
+  .text-gradient-gold-flow {
+    background: linear-gradient(
+      90deg,
+      oklch(0.55 0.18 65),
+      oklch(0.78 0.16 85),
+      oklch(0.85 0.14 90),
+      oklch(0.78 0.16 85),
+      oklch(0.55 0.18 65)
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradient-flow 3s ease-in-out infinite;
+  }
+
+  /* === 마이크로 인터랙션: 버튼 호버 (떠오르기) === */
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-1px);
+  }
+
+  /* === 분석 버튼: 머니 그린 포인트 === */
+  .btn-analyze {
+    transition: all 0.2s ease;
+  }
+  .btn-analyze:hover:not(:disabled) {
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.15), 0 4px 12px rgba(34, 197, 94, 0.12);
+    filter: brightness(1.05);
+  }
+  .btn-analyze:active:not(:disabled) {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.1);
+  }
+  .btn-analyze:focus-visible {
+    outline: 2px solid rgba(34, 197, 94, 0.5);
+    outline-offset: 2px;
+  }
+
+  /* === 마이크로 인터랙션: pill 호버 === */
+  .hover-pill {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .hover-pill:hover {
+    transform: scale(1.05);
+  }
+
+  /* === 마이크로 인터랙션: 카드 아이콘 호버 === */
+  .group:hover .icon-hover {
+    transform: rotate(8deg) scale(1.1);
+    transition: transform 0.3s ease;
+  }
+  .icon-hover {
+    transition: transform 0.3s ease;
+  }
+
+  /* === MoneyScore 골드 글래스 (토스 스타일) === */
+  .money-score-gold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 티어 1: 보통 (< 0.8) */
+  .money-score-gold[data-tier="normal"] {
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--muted-foreground);
+  }
+
+  /* 티어 2: 좋음 (0.8 ~ 1.0) */
+  .money-score-gold[data-tier="good"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(245, 158, 11, 0.12));
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    color: oklch(0.55 0.14 75);
+  }
+
+  /* 티어 3: 훌륭 (1.0 ~ 1.2) */
+  .money-score-gold[data-tier="great"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(245, 158, 11, 0.18));
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: oklch(0.50 0.16 70);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+  }
+
+  /* 티어 4: 잭팟 (> 1.2) — 골드 글래스 + 쉬머 */
+  .money-score-gold[data-tier="jackpot"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(217, 119, 6, 0.22), rgba(251, 191, 36, 0.15));
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: oklch(0.42 0.18 65);
+    box-shadow:
+      0 2px 12px rgba(245, 158, 11, 0.15),
+      0 0 20px rgba(251, 191, 36, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    text-shadow: 0 0 12px rgba(251, 191, 36, 0.2);
+  }
+  .money-score-gold[data-tier="jackpot"]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.35),
+      transparent
+    );
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
+
+  .dark .money-score-gold[data-tier="good"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.15));
+    color: oklch(0.80 0.14 85);
+  }
+  .dark .money-score-gold[data-tier="great"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(245, 158, 11, 0.2));
+    color: oklch(0.82 0.16 85);
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
+  }
+  .dark .money-score-gold[data-tier="jackpot"] {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(217, 119, 6, 0.25), rgba(251, 191, 36, 0.18));
+    color: oklch(0.88 0.16 85);
+    box-shadow:
+      0 2px 12px rgba(245, 158, 11, 0.2),
+      0 0 24px rgba(251, 191, 36, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    text-shadow: 0 0 16px rgba(251, 191, 36, 0.3);
+  }
+
+  /* === S등급 뱃지 반짝이 === */
+  .badge-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .badge-shimmer::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.4),
+      transparent
+    );
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
+}
+
+/* === Keyframes === */
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes gradient-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Blog prose styles */
+.prose {
+  font-size: 1rem;
+  line-height: 1.85;
+  color: var(--foreground);
+}
+.prose h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  letter-spacing: -0.02em;
+}
+.prose h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+.prose p {
+  margin-bottom: 1.25rem;
+}
+.prose ul, .prose ol {
+  margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li {
+  margin-bottom: 0.5rem;
+}
+.prose a {
+  color: oklch(0.50 0.14 75);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose a:hover {
+  opacity: 0.8;
+}
+.prose blockquote {
+  border-left: 3px solid oklch(0.50 0.14 75 / 0.4);
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.prose code {
+  background: var(--muted);
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.375rem;
+  font-size: 0.875em;
+}
+.prose pre {
+  background: var(--muted);
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+.prose pre code {
+  background: transparent;
+  padding: 0;
+}
+.prose img {
+  border-radius: 0.75rem;
+  margin: 1.5rem 0;
+}
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+.prose strong {
+  font-weight: 600;
 }

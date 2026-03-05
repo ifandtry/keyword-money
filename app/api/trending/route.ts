@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { TrendingCategory } from "@/types";
 
 interface KeywordRank {
   rank: number;
@@ -13,15 +14,24 @@ interface DataLabResponse {
   ranks: KeywordRank[];
 }
 
-export async function GET() {
-  try {
-    // 어제 날짜 (오늘은 데이터가 아직 없을 수 있음)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().split("T")[0];
+const CATEGORIES = [
+  { cid: "50000008", name: "생활/건강" },
+  { cid: "50000009", name: "여가/생활편의" },
+  { cid: "50000006", name: "식품" },
+  { cid: "50000002", name: "화장품/미용" },
+  { cid: "50000003", name: "디지털/가전" },
+  { cid: "50000004", name: "가구/인테리어" },
+  { cid: "50000007", name: "스포츠/레저" },
+  { cid: "50000005", name: "출산/육아" },
+];
 
+async function fetchCategoryKeywords(
+  cid: string,
+  dateStr: string
+): Promise<string[]> {
+  try {
     const params = new URLSearchParams({
-      cid: "50000009", // 여가/생활편의
+      cid,
       timeUnit: "date",
       startDate: dateStr,
       endDate: dateStr,
@@ -37,26 +47,52 @@ export async function GET() {
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "Referer": "https://datalab.naver.com/shoppingInsight/sCategory.naver",
+          "Content-Type":
+            "application/x-www-form-urlencoded; charset=UTF-8",
+          Referer:
+            "https://datalab.naver.com/shoppingInsight/sCategory.naver",
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
         body: params.toString(),
-        next: { revalidate: 3600 }, // 1시간 캐시
+        next: { revalidate: 3600 },
       }
     );
 
-    if (!res.ok) {
-      return NextResponse.json({ keywords: [] });
-    }
-
+    if (!res.ok) return [];
     const data: DataLabResponse = await res.json();
-    const keywords = (data.ranks || []).map((r) => r.keyword);
+    return (data.ranks || []).map((r) => r.keyword);
+  } catch {
+    return [];
+  }
+}
 
-    return NextResponse.json({ keywords, range: data.range });
+export async function GET() {
+  try {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split("T")[0];
+
+    // 모든 카테고리를 병렬로 가져오기
+    const results = await Promise.all(
+      CATEGORIES.map(async (cat) => {
+        const keywords = await fetchCategoryKeywords(cat.cid, dateStr);
+        return { name: cat.name, keywords };
+      })
+    );
+
+    // 키워드가 있는 카테고리만 반환
+    const categories: TrendingCategory[] = results.filter(
+      (c) => c.keywords.length > 0
+    );
+
+    // 하위 호환: 기존 `keywords` 필드도 유지 (첫 카테고리 또는 전체 합산)
+    const allKeywords = categories.flatMap((c) => c.keywords);
+    const uniqueKeywords = [...new Set(allKeywords)].slice(0, 10);
+
+    return NextResponse.json({ keywords: uniqueKeywords, categories });
   } catch (error) {
     console.error("Trending API error:", error);
-    return NextResponse.json({ keywords: [] });
+    return NextResponse.json({ keywords: [], categories: [] });
   }
 }
