@@ -1,9 +1,16 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+let _supabase: SupabaseClient | null = null;
+
+function getSupabase() {
+  if (!_supabase) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return null;
+    _supabase = createClient(url, key);
+  }
+  return _supabase;
+}
 
 type EventType =
   | "page_view"
@@ -23,6 +30,9 @@ export function logEvent(
   userId?: string
 ) {
   if (process.env.NODE_ENV !== "production") return;
+
+  const supabase = getSupabase();
+  if (!supabase) return;
 
   supabase
     .from("event_logs")
