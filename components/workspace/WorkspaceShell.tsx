@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Sidebar } from "./Sidebar";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { PageViewLogger } from "./PageViewLogger";
 
 interface WorkspaceShellProps {
   children: React.ReactNode;
@@ -15,6 +16,7 @@ export function WorkspaceShell({ children, user }: WorkspaceShellProps) {
 
   return (
     <div className="flex min-h-screen">
+      <PageViewLogger />
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

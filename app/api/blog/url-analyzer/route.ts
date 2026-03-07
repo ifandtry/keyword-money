@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeBlogPost } from "@/lib/blog/analyzer";
+import { logEvent } from "@/lib/supabase/logger";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await analyzeBlogPost(url.trim());
+    logEvent("blog_url_analyzer", { url: url.trim(), textLength: result.textLength });
     return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "분석 중 오류가 발생했습니다";

@@ -12,7 +12,7 @@ function getSupabase() {
   return _supabase;
 }
 
-type EventType =
+export type EventType =
   | "page_view"
   | "analyze"
   | "extract"
@@ -23,6 +23,10 @@ type EventType =
   | "discovery"
   | "expansion"
   | "production"
+  | "blog_top_insights"
+  | "blog_url_analyzer"
+  | "blog_compare"
+  | "blog_ranking_chance"
   | "review_program_modal_viewed"
   | "review_program_cta_blog_clicked"
   | "review_program_cta_submit_clicked"

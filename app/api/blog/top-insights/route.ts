@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeTopPosts } from "@/lib/blog/analyzer";
+import { logEvent } from "@/lib/supabase/logger";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await analyzeTopPosts(keyword.trim());
+    logEvent("blog_top_insights", { keyword: keyword.trim(), successCount: result.successCount });
     return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "분석 중 오류가 발생했습니다";

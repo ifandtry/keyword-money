@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { logClientEvent } from "@/lib/logClient";
 
 interface ReviewProgramModalProps {
   open: boolean;
@@ -10,6 +12,12 @@ interface ReviewProgramModalProps {
 
 export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModalProps) {
   const router = useRouter();
+
+  useEffect(() => {
+    if (open) {
+      logClientEvent("review_program_modal_viewed", { source });
+    }
+  }, [open, source]);
 
   if (!open) return null;
 
@@ -60,6 +68,7 @@ export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModal
         <div className="space-y-2.5 mb-4">
           <button
             onClick={() => {
+              logClientEvent("review_program_cta_blog_clicked", { source });
               onClose();
               router.push("/review-program");
             }}
@@ -69,6 +78,7 @@ export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModal
           </button>
           <button
             onClick={() => {
+              logClientEvent("review_program_cta_submit_clicked", { source });
               onClose();
               router.push(`/review-program/submit${source ? `?source=${source}` : ""}`);
             }}
@@ -81,7 +91,10 @@ export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModal
         {/* 보조 버튼 */}
         <div className="flex justify-center">
           <button
-            onClick={onClose}
+            onClick={() => {
+              logClientEvent("review_program_dismissed", { source });
+              onClose();
+            }}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             나중에 할게요
