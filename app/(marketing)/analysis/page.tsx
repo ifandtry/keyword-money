@@ -157,6 +157,7 @@ function AnalysisContent() {
   const [data, setData] = useState<ExpansionResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inputKeyword, setInputKeyword] = useState(keywordParam);
 
   const { canUse, increment } = useUsageLimit();
 
@@ -225,12 +226,44 @@ function AnalysisContent() {
 
         <section className="max-w-2xl mx-auto mb-8 text-center">
           <h1 className="text-2xl font-bold mb-2">키워드 분석 및 확장</h1>
-          {keywordParam && (
+          {keywordParam && !data && !loading && (
             <p className="text-muted-foreground">
               &ldquo;{keywordParam}&rdquo; 키워드를 확장 분석합니다
             </p>
           )}
         </section>
+
+        {/* 키워드 입력 폼 */}
+        {!loading && !data && (
+          <section className="max-w-lg mx-auto mb-8 animate-in fade-in duration-300">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!inputKeyword.trim()) return;
+                const base = isWorkspace ? "/keyword/analyze" : "/analysis";
+                router.push(`${base}?keyword=${encodeURIComponent(inputKeyword.trim())}`);
+                handleExpand(inputKeyword.trim());
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={inputKeyword}
+                onChange={(e) => setInputKeyword(e.target.value)}
+                placeholder="분석할 키워드를 입력하세요"
+                className="flex-1 h-12 px-4 rounded-xl border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <Button
+                type="submit"
+                size="lg"
+                className="h-12 px-6 rounded-xl btn-analyze"
+                disabled={!inputKeyword.trim()}
+              >
+                분석 시작
+              </Button>
+            </form>
+          </section>
+        )}
 
         {/* 로딩 */}
         {loading && (
