@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Search,
   BarChart3,
   Link2,
@@ -147,6 +153,7 @@ const quickStartCards = [
     href: "/blog/url-analyzer",
     color: "text-violet-600",
     bgColor: "bg-violet-500/5",
+    comingSoon: true,
   },
   {
     icon: FileText,
@@ -162,6 +169,7 @@ export default function WorkspaceHome() {
   const router = useRouter();
   const [keyword, setKeyword] = useState("");
   const [trendingKeywords, setTrendingKeywords] = useState<string[]>(FALLBACK_KEYWORDS);
+  const [showComingSoon, setShowComingSoon] = useState(false);
 
   useEffect(() => {
     fetch("/api/trending")
@@ -227,26 +235,53 @@ export default function WorkspaceHome() {
       <section className="mb-8 sm:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
         <h2 className="text-lg font-semibold mb-4">빠른 시작</h2>
         <div className="grid sm:grid-cols-2 gap-3">
-          {quickStartCards.map((card) => (
-            <Link
-              key={card.href}
-              href={card.href}
-              className="group rounded-2xl border border-border/30 p-5 hover:border-border/60 hover:shadow-sm transition-all duration-200"
-            >
-              <div className="flex items-start gap-3">
-                <div className={`shrink-0 rounded-xl p-2.5 ${card.bgColor}`}>
-                  <card.icon className={`h-5 w-5 ${card.color}`} />
+          {quickStartCards.map((card) =>
+            card.comingSoon ? (
+              <button
+                key={card.href}
+                type="button"
+                onClick={() => setShowComingSoon(true)}
+                className="group rounded-2xl border border-border/30 p-5 hover:border-border/60 hover:shadow-sm transition-all duration-200 text-left relative"
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`shrink-0 rounded-xl p-2.5 ${card.bgColor}`}>
+                    <card.icon className={`h-5 w-5 ${card.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      {card.title}
+                      <span className="text-[10px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+                        준비중
+                      </span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      {card.desc}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0 mt-1" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm">{card.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    {card.desc}
-                  </p>
+              </button>
+            ) : (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="group rounded-2xl border border-border/30 p-5 hover:border-border/60 hover:shadow-sm transition-all duration-200"
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`shrink-0 rounded-xl p-2.5 ${card.bgColor}`}>
+                    <card.icon className={`h-5 w-5 ${card.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm">{card.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      {card.desc}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0 mt-1" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0 mt-1" />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          )}
         </div>
       </section>
 
@@ -259,20 +294,49 @@ export default function WorkspaceHome() {
         <div className="grid sm:grid-cols-3 gap-3">
           {[
             { title: "상위 글 분석", desc: "상위 5개 글의 공통 패턴 발견", href: "/blog/top-insights" },
-            { title: "내 글 비교", desc: "상위 글과 내 글의 차이점 분석", href: "/blog/compare" },
-            { title: "상위노출 가능성", desc: "내 글의 상위노출 점수 측정", href: "/blog/ranking-chance" },
-          ].map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-xl border border-border/30 p-4 text-center hover:border-border/60 hover:shadow-sm transition-all"
-            >
-              <p className="text-sm font-medium">{item.title}</p>
-              <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
-            </Link>
-          ))}
+            { title: "내 글 비교", desc: "상위 글과 내 글의 차이점 분석", href: "/blog/compare", comingSoon: true },
+            { title: "상위노출 가능성", desc: "내 글의 상위노출 점수 측정", href: "/blog/ranking-chance", comingSoon: true },
+          ].map((item) =>
+            item.comingSoon ? (
+              <button
+                key={item.href}
+                type="button"
+                onClick={() => setShowComingSoon(true)}
+                className="rounded-xl border border-border/30 p-4 text-center hover:border-border/60 hover:shadow-sm transition-all"
+              >
+                <p className="text-sm font-medium flex items-center justify-center gap-2">
+                  {item.title}
+                  <span className="text-[10px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+                    준비중
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
+              </button>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-xl border border-border/30 p-4 text-center hover:border-border/60 hover:shadow-sm transition-all"
+              >
+                <p className="text-sm font-medium">{item.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
+              </Link>
+            )
+          )}
         </div>
       </section>
+
+      {/* 준비중 모달 */}
+      <Dialog open={showComingSoon} onOpenChange={setShowComingSoon}>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle>준비 중인 기능입니다</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            현재 준비 중인 기능입니다. 빠른 시일 내에 제공할 예정이니 조금만 기다려주세요!
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

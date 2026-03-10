@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/workspace/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,18 +18,22 @@ import {
   Lightbulb,
   ListOrdered,
   AlertCircle,
+  ArrowRight,
 } from "lucide-react";
 import type { TopPostsAnalysis } from "@/types/blog";
 
 export default function TopInsightsPage() {
-  const [keyword, setKeyword] = useState("");
+  const searchParams = useSearchParams();
+  const initialKeyword = searchParams.get("keyword") || "";
+
+  const [keyword, setKeyword] = useState(initialKeyword);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TopPostsAnalysis | null>(null);
   const [error, setError] = useState("");
 
-  const handleAnalyze = async () => {
-    const q = keyword.trim();
-    if (!q) return;
+  const handleAnalyze = useCallback(async (q?: string) => {
+    const query = (q ?? keyword).trim();
+    if (!query) return;
 
     setLoading(true);
     setError("");
@@ -37,7 +43,7 @@ export default function TopInsightsPage() {
       const res = await fetch("/api/blog/top-insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: q }),
+        body: JSON.stringify({ keyword: query }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -50,7 +56,15 @@ export default function TopInsightsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [keyword]);
+
+  // URL 파라미터로 키워드가 넘어오면 자동 분석
+  useEffect(() => {
+    if (initialKeyword && !result && !loading) {
+      handleAnalyze(initialKeyword);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -70,7 +84,7 @@ export default function TopInsightsPage() {
             className="h-11"
           />
           <Button
-            onClick={handleAnalyze}
+            onClick={() => handleAnalyze()}
             disabled={loading || !keyword.trim()}
             className="h-11 px-6 gap-2 shrink-0"
           >
@@ -78,6 +92,18 @@ export default function TopInsightsPage() {
             분석
           </Button>
         </div>
+        {!initialKeyword && !result && !loading && (
+          <div className="mt-3 pt-3 border-t border-border/20">
+            <Link
+              href="/keyword/discover"
+              className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Search className="h-3.5 w-3.5" />
+              돈이 되는 키워드 탐색이 필요한 경우
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
       </Card>
 
       {/* 로딩 */}

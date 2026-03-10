@@ -17,7 +17,20 @@ function db(): any {
   return getAdminClient();
 }
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+async function isAdmin(userId: string): Promise<boolean> {
+  const { data } = await db().auth.admin.getUserById(userId);
+  if (!data?.user?.email) return false;
+  return ADMIN_EMAILS.includes(data.user.email.toLowerCase());
+}
+
 export async function getUserPlan(userId: string): Promise<PlanType> {
+  if (await isAdmin(userId)) return "pro";
+
   const { data: sub } = await db()
     .from("subscriptions")
     .select("status")
@@ -42,6 +55,10 @@ export async function checkAndIncrementUsage(
   userId: string,
   action: ActionType
 ): Promise<UsageCheckResult> {
+  if (await isAdmin(userId)) {
+    return { allowed: true, plan: "pro", used: 0, limit: 999999, remaining: 999999 };
+  }
+
   const plan = await getUserPlan(userId);
   const limit = PLAN_LIMITS[plan][action];
   const column = ACTION_COLUMN[action];
@@ -92,6 +109,15 @@ export async function checkAndIncrementUsage(
 }
 
 export async function getUsageToday(userId: string) {
+  if (await isAdmin(userId)) {
+    return {
+      plan: "pro" as PlanType,
+      discovery: { used: 0, limit: 999999 },
+      analysis: { used: 0, limit: 999999 },
+      production: { used: 0, limit: 999999 },
+    };
+  }
+
   const plan = await getUserPlan(userId);
   const today = new Date().toISOString().split("T")[0];
 

@@ -21,7 +21,6 @@ export type EventType =
   | "login"
   | "signup"
   | "discovery"
-  | "expansion"
   | "production"
   | "blog_top_insights"
   | "blog_url_analyzer"

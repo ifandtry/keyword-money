@@ -1,7 +1,6 @@
 // 워크스페이스 경로와 기존 경로 매핑
 const ROUTE_MAP: Record<string, string> = {
   "/discovery": "/keyword/discover",
-  "/analysis": "/keyword/analyze",
   "/production": "/keyword/ideas",
 };
 
@@ -14,7 +13,7 @@ const REVERSE_MAP: Record<string, string> = Object.fromEntries(
  * 적절한 경로를 반환합니다.
  */
 export function resolveRoute(
-  target: "/discovery" | "/analysis" | "/production",
+  target: "/discovery" | "/production",
   currentPathname: string
 ): string {
   const isWorkspace =

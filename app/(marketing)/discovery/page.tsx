@@ -8,8 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stepper } from "@/components/Stepper";
 import { useUsageLimit } from "@/hooks/useUsageLimit";
-import { DiscoveryResponse, MoneyKeywordItem, TrendingCategory } from "@/types";
+import { DiscoveryResponse, MoneyKeywordItem, TrendingCategory, BlogReference } from "@/types";
 import { ReviewProgramModal } from "@/components/ReviewProgramModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -33,6 +39,12 @@ import {
   Flame,
   ArrowRight,
   Filter,
+  ChevronDown,
+  Crown,
+  Star,
+  RefreshCw,
+  ExternalLink,
+  FileText,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 
@@ -72,6 +84,19 @@ function DiscoveryContent() {
     TrendingCategory[]
   >([]);
 
+  const [showAllRelated, setShowAllRelated] = useState(false);
+  const [showAllAds, setShowAllAds] = useState(false);
+
+  // 상위 블로그
+  const [topBlogs, setTopBlogs] = useState<BlogReference[]>([]);
+  const [blogsLoading, setBlogsLoading] = useState(false);
+  const [blogKeyword, setBlogKeyword] = useState<string>("");
+
+  // 추천 키워드 수동 변경
+  const [overrideMain, setOverrideMain] = useState<MoneyKeywordItem | null>(null);
+  const [overrideSubs, setOverrideSubs] = useState<MoneyKeywordItem[] | null>(null);
+  const [changeTarget, setChangeTarget] = useState<"main" | number | null>(null); // null=닫힘, "main"=메인, 0~2=서브 인덱스
+
   const { remaining, canUse, increment } = useUsageLimit();
   const [showReviewModal, setShowReviewModal] = useState(false);
 
@@ -103,6 +128,12 @@ function DiscoveryContent() {
       setLoading(true);
       setError(null);
       setData(null);
+      setShowAllRelated(false);
+      setShowAllAds(false);
+      setOverrideMain(null);
+      setOverrideSubs(null);
+      setTopBlogs([]);
+      setBlogKeyword("");
 
       try {
         const res = await fetch("/api/discovery", {
@@ -141,31 +172,134 @@ function DiscoveryContent() {
   }, []);
 
   const handleKeywordClick = (kw: MoneyKeywordItem) => {
-    const base = pathname.startsWith("/keyword/") ? "/keyword/analyze" : "/analysis";
-    router.push(`${base}?keyword=${encodeURIComponent(kw.keyword)}`);
+    setKeyword(kw.keyword);
+    handleSearch(kw.keyword);
   };
 
   const getSaturation = (item: MoneyKeywordItem) =>
     item.totalVolume > 0 ? item.totalDocCount / item.totalVolume : 999;
 
-  // 클라이언트 사이드 필터 + 정렬
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    let items = data.keywords;
-    if (minVolume > 0) {
-      items = items.filter((item) => item.totalVolume >= minVolume);
-    }
-    if (maxDocs > 0) {
-      items = items.filter((item) => item.totalDocCount <= maxDocs);
-    }
-    return [...items].sort((a, b) => {
-      if (sortKey === "totalDocCount") return a[sortKey] - b[sortKey];
-      if (sortKey === "saturation") return getSaturation(a) - getSaturation(b);
-      return b[sortKey] - a[sortKey];
-    });
-  }, [data, minVolume, maxDocs, sortKey]);
+  const applyFilterSort = useCallback(
+    (items: MoneyKeywordItem[]) => {
+      let filtered = items;
+      if (minVolume > 0) {
+        filtered = filtered.filter((item) => item.totalVolume >= minVolume);
+      }
+      if (maxDocs > 0) {
+        filtered = filtered.filter((item) => item.totalDocCount <= maxDocs);
+      }
+      return [...filtered].sort((a, b) => {
+        if (sortKey === "totalDocCount") return a[sortKey] - b[sortKey];
+        if (sortKey === "saturation") return getSaturation(a) - getSaturation(b);
+        return b[sortKey] - a[sortKey];
+      });
+    },
+    [minVolume, maxDocs, sortKey]
+  );
 
-  const totalCount = data?.keywords.length ?? 0;
+  // 클라이언트 사이드 필터 + 정렬
+  const filteredAds = useMemo(() => {
+    if (!data) return [];
+    return applyFilterSort(data.keywords);
+  }, [data, applyFilterSort]);
+
+  const filteredRelated = useMemo(() => {
+    if (!data) return [];
+    return applyFilterSort(data.relatedKeywords ?? []);
+  }, [data, applyFilterSort]);
+
+  const totalAdsCount = data?.keywords.length ?? 0;
+  const totalRelatedCount = data?.relatedKeywords?.length ?? 0;
+
+  // 메인/서브 키워드 추천
+  const recommended = useMemo(() => {
+    if (!data) return null;
+    const all = [...filteredAds, ...filteredRelated];
+    // 중복 제거 (keyword 기준, 먼저 나온 것 우선)
+    const seen = new Set<string>();
+    const unique = all.filter((item) => {
+      if (seen.has(item.keyword)) return false;
+      seen.add(item.keyword);
+      return true;
+    });
+    if (unique.length === 0) return null;
+
+    const sorted = [...unique].sort((a, b) => b.finalScore - a.finalScore);
+    const main = sorted[0];
+    const rest = sorted.slice(1);
+    const mainTokens = main.keyword.split(/\s+/).filter((t) => t.length > 0);
+
+    // 1순위: 메인 키워드 토큰이 포함된 연관 키워드
+    const related = rest.filter((c) =>
+      mainTokens.some((token) => c.keyword.includes(token))
+    );
+    // 2순위: 토큰 겹침 없어도 FinalScore 상위 키워드
+    const others = rest.filter(
+      (c) => !mainTokens.some((token) => c.keyword.includes(token))
+    );
+    const subs = [...related, ...others].slice(0, 3);
+    return { main, subs };
+  }, [data, filteredAds, filteredRelated]);
+
+  // 실제 표시될 메인/서브 (오버라이드 우선)
+  const displayMain = overrideMain ?? recommended?.main ?? null;
+  const displaySubs = overrideSubs ?? recommended?.subs ?? [];
+
+  // 선택 다이얼로그용 전체 키워드 목록 (중복 제거, FinalScore순)
+  const allCandidates = useMemo(() => {
+    const all = [...filteredAds, ...filteredRelated];
+    const seen = new Set<string>();
+    return all
+      .filter((item) => {
+        if (seen.has(item.keyword)) return false;
+        seen.add(item.keyword);
+        return true;
+      })
+      .sort((a, b) => b.finalScore - a.finalScore);
+  }, [filteredAds, filteredRelated]);
+
+  const handleSelectKeyword = (item: MoneyKeywordItem) => {
+    if (changeTarget === "main") {
+      setOverrideMain(item);
+      // 서브에서 새 메인과 같은 키워드 제거
+      const currentSubs = overrideSubs ?? recommended?.subs ?? [];
+      if (currentSubs.some((s) => s.keyword === item.keyword)) {
+        setOverrideSubs(currentSubs.filter((s) => s.keyword !== item.keyword));
+      }
+    } else if (typeof changeTarget === "number") {
+      const currentSubs = [...(overrideSubs ?? recommended?.subs ?? [])];
+      // 이미 메인이거나 다른 서브에 있으면 교체
+      const mainKw = (overrideMain ?? recommended?.main)?.keyword;
+      if (item.keyword === mainKw) {
+        setChangeTarget(null);
+        return;
+      }
+      const existIdx = currentSubs.findIndex((s) => s.keyword === item.keyword);
+      if (existIdx !== -1 && existIdx !== changeTarget) {
+        // 이미 다른 서브 슬롯에 있으면 스왑
+        currentSubs[existIdx] = currentSubs[changeTarget];
+      }
+      currentSubs[changeTarget] = item;
+      setOverrideSubs(currentSubs);
+    }
+    setChangeTarget(null);
+  };
+
+  // displayMain 변경 시 상위 블로그 가져오기
+  useEffect(() => {
+    if (!displayMain || displayMain.keyword === blogKeyword) return;
+    setBlogsLoading(true);
+    setBlogKeyword(displayMain.keyword);
+    fetch("/api/blog/top-posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: displayMain.keyword }),
+    })
+      .then((res) => res.json())
+      .then((d) => setTopBlogs(d.blogs || []))
+      .catch(() => setTopBlogs([]))
+      .finally(() => setBlogsLoading(false));
+  }, [displayMain, blogKeyword]);
 
   return (
     <main className="bg-background min-h-screen">
@@ -282,22 +416,13 @@ function DiscoveryContent() {
           </section>
         )}
 
-        {/* 결과 테이블 */}
+        {/* 결과 영역 */}
         {data && !loading && (
-          <section className="max-w-5xl mx-auto pb-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* 헤더: 정렬 + 필터 */}
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <h2 className="text-xl font-semibold">
-                탐색 결과
-                <span className="text-base font-normal text-muted-foreground ml-2">
-                  {filtered.length}개
-                  {filtered.length !== totalCount && (
-                    <span className="text-xs"> / 전체 {totalCount}개</span>
-                  )}
-                </span>
-              </h2>
+          <section className="mx-auto pb-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* 공통 필터/정렬 */}
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3 max-w-7xl mx-auto">
+              <h2 className="text-xl font-semibold">탐색 결과</h2>
               <div className="flex items-center gap-2 flex-wrap">
-                {/* 필터 */}
                 <div className="flex items-center gap-1.5 text-sm">
                   <Filter className="h-3.5 w-3.5 text-muted-foreground" />
                   <Select
@@ -331,7 +456,6 @@ function DiscoveryContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* 정렬 */}
                 <Select
                   value={sortKey}
                   onValueChange={(v) => setSortKey(v as SortKey)}
@@ -351,114 +475,514 @@ function DiscoveryContent() {
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground mb-4">
-              키워드를 클릭하면 Step 2(키워드 확장)로 이동합니다.
+            <p className="text-sm text-muted-foreground mb-4 max-w-7xl mx-auto">
+              키워드를 클릭하면 해당 키워드로 재탐색을 진행합니다.
             </p>
 
-            {filtered.length === 0 ? (
-              <div className="rounded-2xl border border-border/30 p-8 text-center text-muted-foreground">
-                필터 조건에 맞는 키워드가 없습니다. 필터를 조정해 보세요.
+            {/* 2열 구조 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
+              {/* 좌측: 네이버 연관검색어 */}
+              <div>
+                <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                  <Search className="h-4 w-4 text-green-600" />
+                  네이버 연관검색어
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {filteredRelated.length}개
+                    {filteredRelated.length !== totalRelatedCount && (
+                      <span className="text-xs"> / 전체 {totalRelatedCount}개</span>
+                    )}
+                  </span>
+                </h3>
+                {filteredRelated.length === 0 ? (
+                  <div className="rounded-2xl border border-border/30 p-8 text-center text-muted-foreground">
+                    연관검색어 결과가 없습니다.
+                  </div>
+                ) : (
+                  <div className="rounded-2xl overflow-x-auto border border-border/30 shadow-sm">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>키워드</TableHead>
+                          <TableHead className="text-right">총검색량</TableHead>
+                          <TableHead className="text-right">문서수</TableHead>
+                          <TableHead className="text-right">포화도</TableHead>
+                          <TableHead className="text-right">MoneyScore</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(showAllRelated ? filteredRelated : filteredRelated.slice(0, 10)).map((item) => (
+                          <TableRow
+                            key={item.keyword}
+                            className="cursor-pointer hover:bg-primary/5 transition-colors"
+                            onClick={() => handleKeywordClick(item)}
+                          >
+                            <TableCell className="font-medium whitespace-nowrap">
+                              {item.keyword}
+                              {item.commercialTokens.length > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
+                                >
+                                  {item.commercialTokens.join(" ")}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {item.totalVolume.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.totalDocCount > 0
+                                ? item.totalDocCount.toLocaleString()
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {item.totalDocCount > 0 && item.totalVolume > 0 ? (
+                                <span
+                                  className={
+                                    getSaturation(item) < 5
+                                      ? "text-green-600 font-medium"
+                                      : getSaturation(item) > 50
+                                        ? "text-red-500"
+                                        : "text-muted-foreground"
+                                  }
+                                >
+                                  {getSaturation(item).toFixed(1)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span
+                                className="money-score-gold"
+                                data-tier={
+                                  item.moneyScore >= 1.2
+                                    ? "jackpot"
+                                    : item.moneyScore >= 1.0
+                                      ? "great"
+                                      : item.moneyScore >= 0.8
+                                        ? "good"
+                                        : "normal"
+                                }
+                              >
+                                {item.moneyScore.toFixed(2)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                {filteredRelated.length > 10 && !showAllRelated && (
+                  <Button
+                    variant="ghost"
+                    className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground gap-1"
+                    onClick={() => setShowAllRelated(true)}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    더보기 ({filteredRelated.length - 10}개 더)
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="rounded-2xl overflow-x-auto border border-border/30 shadow-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>키워드</TableHead>
-                      <TableHead className="text-right">PC</TableHead>
-                      <TableHead className="text-right">모바일</TableHead>
-                      <TableHead className="text-right">총검색량</TableHead>
-                      <TableHead className="text-right">문서수</TableHead>
-                      <TableHead className="text-right">포화도</TableHead>
-                      <TableHead className="text-right">MoneyScore</TableHead>
-                      <TableHead className="text-center">상업성</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((item) => (
-                      <TableRow
-                        key={item.keyword}
-                        className="cursor-pointer hover:bg-primary/5 transition-colors"
-                        onClick={() => handleKeywordClick(item)}
-                      >
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {item.keyword}
-                          {item.commercialTokens.length > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
-                            >
-                              {item.commercialTokens.join(" ")}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.pcVolume.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.mobileVolume.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {item.totalVolume.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.totalDocCount > 0
-                            ? item.totalDocCount.toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.totalDocCount > 0 && item.totalVolume > 0 ? (
-                            <span
-                              className={
-                                getSaturation(item) < 5
-                                  ? "text-green-600 font-medium"
-                                  : getSaturation(item) > 50
-                                    ? "text-red-500"
-                                    : "text-muted-foreground"
-                              }
-                            >
-                              {getSaturation(item).toFixed(1)}
-                            </span>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
+
+              {/* 우측: 네이버 광고 API 기반 */}
+              <div>
+                <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-blue-600" />
+                  네이버 광고 API 기반 탐색
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {filteredAds.length}개
+                    {filteredAds.length !== totalAdsCount && (
+                      <span className="text-xs"> / 전체 {totalAdsCount}개</span>
+                    )}
+                  </span>
+                </h3>
+                {filteredAds.length === 0 ? (
+                  <div className="rounded-2xl border border-border/30 p-8 text-center text-muted-foreground">
+                    필터 조건에 맞는 키워드가 없습니다.
+                  </div>
+                ) : (
+                  <div className="rounded-2xl overflow-x-auto border border-border/30 shadow-sm">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>키워드</TableHead>
+                          <TableHead className="text-right">총검색량</TableHead>
+                          <TableHead className="text-right">문서수</TableHead>
+                          <TableHead className="text-right">포화도</TableHead>
+                          <TableHead className="text-right">MoneyScore</TableHead>
+                          <TableHead className="text-center">상업성</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(showAllAds ? filteredAds : filteredAds.slice(0, 10)).map((item) => (
+                          <TableRow
+                            key={item.keyword}
+                            className="cursor-pointer hover:bg-primary/5 transition-colors"
+                            onClick={() => handleKeywordClick(item)}
+                          >
+                            <TableCell className="font-medium whitespace-nowrap">
+                              {item.keyword}
+                              {item.commercialTokens.length > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
+                                >
+                                  {item.commercialTokens.join(" ")}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {item.totalVolume.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.totalDocCount > 0
+                                ? item.totalDocCount.toLocaleString()
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {item.totalDocCount > 0 && item.totalVolume > 0 ? (
+                                <span
+                                  className={
+                                    getSaturation(item) < 5
+                                      ? "text-green-600 font-medium"
+                                      : getSaturation(item) > 50
+                                        ? "text-red-500"
+                                        : "text-muted-foreground"
+                                  }
+                                >
+                                  {getSaturation(item).toFixed(1)}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span
+                                className="money-score-gold"
+                                data-tier={
+                                  item.moneyScore >= 1.2
+                                    ? "jackpot"
+                                    : item.moneyScore >= 1.0
+                                      ? "great"
+                                      : item.moneyScore >= 0.8
+                                        ? "good"
+                                        : "normal"
+                                }
+                              >
+                                {item.moneyScore.toFixed(2)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.commercialWeight > 1 ? (
+                                <Badge className="bg-amber-500 text-white text-xs">
+                                  x{item.commercialWeight}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  -
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                {filteredAds.length > 10 && !showAllAds && (
+                  <Button
+                    variant="ghost"
+                    className="w-full mt-2 text-sm text-muted-foreground hover:text-foreground gap-1"
+                    onClick={() => setShowAllAds(true)}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    더보기 ({filteredAds.length - 10}개 더)
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* 메인/서브 키워드 추천 */}
+            {recommended && displayMain && (
+              <>
+                <div className="max-w-7xl mx-auto my-8">
+                  <hr className="border-border/40" />
+                </div>
+                <div className="max-w-7xl mx-auto">
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <Crown className="h-5 w-5 text-amber-500" />
+                    추천 키워드 조합
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    위 탐색 결과를 기반으로 FinalScore가 높은 키워드를 메인/서브로 추천합니다.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* 메인 키워드 */}
+                    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Crown className="h-4 w-4 text-amber-500" />
+                          <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">메인 키워드</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                          onClick={() => setChangeTarget("main")}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          변경
+                        </Button>
+                      </div>
+                      <p className="text-xl font-bold mb-4">{displayMain.keyword}</p>
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <span className="text-muted-foreground block text-xs">총검색량</span>
+                          <span className="font-semibold">{displayMain.totalVolume.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-xs">문서수</span>
+                          <span className="font-semibold">{displayMain.totalDocCount.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-xs">MoneyScore</span>
                           <span
-                            className="money-score-gold"
+                            className="font-semibold money-score-gold"
                             data-tier={
-                              item.moneyScore >= 1.2
-                                ? "jackpot"
-                                : item.moneyScore >= 1.0
-                                  ? "great"
-                                  : item.moneyScore >= 0.8
-                                    ? "good"
-                                    : "normal"
+                              displayMain.moneyScore >= 1.2 ? "jackpot"
+                                : displayMain.moneyScore >= 1.0 ? "great"
+                                : displayMain.moneyScore >= 0.8 ? "good"
+                                : "normal"
                             }
                           >
-                            {item.moneyScore.toFixed(2)}
+                            {displayMain.moneyScore.toFixed(2)}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {item.commercialWeight > 1 ? (
-                            <Badge className="bg-amber-500 text-white text-xs">
-                              x{item.commercialWeight}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              -
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </div>
+                      </div>
+                      {displayMain.commercialTokens.length > 0 && (
+                        <div className="mt-3">
+                          <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300">
+                            {displayMain.commercialTokens.join(" ")}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 서브 키워드 */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Star className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">서브 키워드</span>
+                        <span className="text-xs text-muted-foreground">함께 쓰면 좋은 키워드</span>
+                      </div>
+                      {displaySubs.length === 0 ? (
+                        <div className="rounded-xl border border-border/30 p-4 text-sm text-muted-foreground text-center">
+                          적합한 서브 키워드를 찾지 못했습니다.
+                        </div>
+                      ) : (
+                        displaySubs.map((sub, idx) => (
+                          <div
+                            key={sub.keyword}
+                            className="rounded-xl border border-border/30 bg-background p-4"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{sub.keyword}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+                                onClick={() => setChangeTarget(idx)}
+                              >
+                                <RefreshCw className="h-3 w-3" />
+                                변경
+                              </Button>
+                            </div>
+                            <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                              <span>검색량 <strong className="text-foreground">{sub.totalVolume.toLocaleString()}</strong></span>
+                              <span>문서수 <strong className="text-foreground">{sub.totalDocCount.toLocaleString()}</strong></span>
+                              <span>MoneyScore{" "}
+                                <strong
+                                  className="money-score-gold"
+                                  data-tier={
+                                    sub.moneyScore >= 1.2 ? "jackpot"
+                                      : sub.moneyScore >= 1.0 ? "great"
+                                      : sub.moneyScore >= 0.8 ? "good"
+                                      : "normal"
+                                  }
+                                >
+                                  {sub.moneyScore.toFixed(2)}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 콘텐츠 아이디어 CTA */}
+                  <div className="mt-6 flex justify-center">
+                    <Button
+                      className="gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 shadow-none"
+                      onClick={() => {
+                        const base = pathname.startsWith("/keyword/") ? "/keyword/ideas" : "/production";
+                        const subParams = displaySubs.map((s) => s.keyword).join(",");
+                        router.push(
+                          `${base}?main=${encodeURIComponent(displayMain?.keyword ?? "")}&subs=${encodeURIComponent(subParams)}`
+                        );
+                      }}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      이 키워드로 콘텐츠 아이디어 뽑으러 가기
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 키워드 변경 다이얼로그 */}
+                <Dialog open={changeTarget !== null} onOpenChange={(open) => !open && setChangeTarget(null)}>
+                  <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+                    <DialogHeader>
+                      <DialogTitle>
+                        {changeTarget === "main" ? "메인 키워드 변경" : "서브 키워드 변경"}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="overflow-y-auto -mx-6 px-6">
+                      <div className="space-y-1">
+                        {allCandidates.map((item) => {
+                          const isCurrentMain = item.keyword === displayMain?.keyword;
+                          const isCurrentSub = displaySubs.some((s) => s.keyword === item.keyword);
+                          const isCurrent =
+                            (changeTarget === "main" && isCurrentMain) ||
+                            (typeof changeTarget === "number" && displaySubs[changeTarget]?.keyword === item.keyword);
+
+                          return (
+                            <button
+                              key={item.keyword}
+                              className={`w-full text-left rounded-lg px-3 py-2.5 text-sm transition-colors flex items-center justify-between gap-2 ${
+                                isCurrent
+                                  ? "bg-primary/10 text-primary font-semibold"
+                                  : isCurrentMain || isCurrentSub
+                                    ? "text-muted-foreground hover:bg-muted/50"
+                                    : "hover:bg-muted"
+                              }`}
+                              onClick={() => handleSelectKeyword(item)}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="truncate">{item.keyword}</span>
+                                {isCurrentMain && (
+                                  <Badge variant="outline" className="text-[10px] shrink-0">메인</Badge>
+                                )}
+                                {isCurrentSub && !isCurrentMain && (
+                                  <Badge variant="outline" className="text-[10px] shrink-0">서브</Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                                <span>{item.totalVolume.toLocaleString()}</span>
+                                <span
+                                  className="money-score-gold"
+                                  data-tier={
+                                    item.moneyScore >= 1.2 ? "jackpot"
+                                      : item.moneyScore >= 1.0 ? "great"
+                                      : item.moneyScore >= 0.8 ? "good"
+                                      : "normal"
+                                  }
+                                >
+                                  {item.moneyScore.toFixed(2)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+
+            {/* 상위 블로그 글 */}
+            {displayMain && (
+              <>
+                <div className="max-w-7xl mx-auto my-8">
+                  <hr className="border-border/40" />
+                </div>
+                <div className="max-w-7xl mx-auto">
+                  <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-green-600" />
+                    상위 블로그 포스팅 예시
+                  </h2>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    <strong>&quot;{displayMain.keyword}&quot;</strong> 검색 시 상위에 노출되는 블로그 글 5개입니다.
+                  </p>
+
+                  {blogsLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                      ))}
+                    </div>
+                  ) : topBlogs.length === 0 ? (
+                    <div className="rounded-2xl border border-border/30 p-8 text-center text-muted-foreground">
+                      상위 블로그 글을 찾지 못했습니다.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {topBlogs.map((blog, i) => (
+                        <a
+                          key={i}
+                          href={blog.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-xl border border-border/30 bg-background p-4 hover:bg-muted/50 hover:border-primary/30 transition-all group"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm group-hover:text-primary transition-colors line-clamp-1">
+                                {blog.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                {blog.description}
+                              </p>
+                              <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                <span>{blog.bloggerName}</span>
+                                {blog.postDate && <span>{blog.postDate}</span>}
+                              </div>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-primary transition-colors" />
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 상위 글 분석 CTA */}
+                  {topBlogs.length > 0 && (
+                    <div className="mt-6 flex justify-center">
+                      <Button
+                        variant="outline"
+                        className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 hover:border-green-400 transition-all"
+                        onClick={() => {
+                          const base = pathname.startsWith("/keyword/") ? "/blog/top-insights" : "/blog/top-insights";
+                          router.push(`${base}?keyword=${encodeURIComponent(displayMain?.keyword ?? "")}`);
+                        }}
+                      >
+                        <Search className="h-4 w-4" />
+                        상위 글 분석하러 가기
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </section>
         )}

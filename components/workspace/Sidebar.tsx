@@ -1,11 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CoinSymbol } from "@/components/CoinSymbol";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Search,
-  Layers,
   FileText,
   BarChart3,
   Link2,
@@ -31,9 +37,28 @@ interface NavItemProps {
   comingSoon?: boolean;
   external?: boolean;
   onClick?: () => void;
+  onComingSoonClick?: () => void;
 }
 
-function NavItem({ href, icon, label, active, comingSoon, external, onClick }: NavItemProps) {
+function NavItem({ href, icon, label, active, comingSoon, external, onClick, onComingSoonClick }: NavItemProps) {
+  if (comingSoon) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onComingSoonClick?.();
+        }}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+      >
+        <span className="shrink-0 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
+        <span className="flex-1 text-left">{label}</span>
+        <span className="text-[10px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+          준비중
+        </span>
+      </button>
+    );
+  }
+
   return (
     <Link
       href={href}
@@ -47,11 +72,6 @@ function NavItem({ href, icon, label, active, comingSoon, external, onClick }: N
     >
       <span className="shrink-0 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
       <span className="flex-1">{label}</span>
-      {comingSoon && (
-        <span className="text-[10px] font-medium text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
-          soon
-        </span>
-      )}
     </Link>
   );
 }
@@ -66,18 +86,18 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function Sidebar({ open, onClose, isLoggedIn }: SidebarProps) {
   const pathname = usePathname();
+  const [showComingSoon, setShowComingSoon] = useState(false);
 
   const keywordItems = [
     { href: "/keyword/discover", icon: <Search />, label: "키워드 탐색" },
-    { href: "/keyword/analyze", icon: <Layers />, label: "키워드 분석/확장" },
     { href: "/keyword/ideas", icon: <FileText />, label: "콘텐츠 아이디어" },
   ];
 
   const blogItems = [
     { href: "/blog/top-insights", icon: <BarChart3 />, label: "상위 글 분석" },
-    { href: "/blog/url-analyzer", icon: <Link2 />, label: "글 URL 분석" },
-    { href: "/blog/compare", icon: <GitCompareArrows />, label: "내 글 비교" },
-    { href: "/blog/ranking-chance", icon: <Trophy />, label: "상위노출 가능성" },
+    { href: "/blog/url-analyzer", icon: <Link2 />, label: "글 URL 분석", comingSoon: true },
+    { href: "/blog/compare", icon: <GitCompareArrows />, label: "내 글 비교", comingSoon: true },
+    { href: "/blog/ranking-chance", icon: <Trophy />, label: "상위노출 가능성", comingSoon: true },
   ];
 
   const bottomItems = [
@@ -124,6 +144,7 @@ export function Sidebar({ open, onClose, isLoggedIn }: SidebarProps) {
             {...item}
             active={pathname === item.href}
             onClick={onClose}
+            onComingSoonClick={() => setShowComingSoon(true)}
           />
         ))}
       </nav>
@@ -161,6 +182,18 @@ export function Sidebar({ open, onClose, isLoggedIn }: SidebarProps) {
           </div>
         </>
       )}
+
+      {/* 준비중 모달 */}
+      <Dialog open={showComingSoon} onOpenChange={setShowComingSoon}>
+        <DialogContent className="max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle>준비 중인 기능입니다</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            현재 준비 중인 기능입니다. 빠른 시일 내에 제공할 예정이니 조금만 기다려주세요!
+          </p>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -2,16 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, Layers, FileText } from "lucide-react";
+import { Search, FileText } from "lucide-react";
 
 const steps = [
   { label: "키워드 탐색", icon: Search, href: "/discovery", wsHref: "/keyword/discover" },
-  { label: "키워드 확장", icon: Layers, href: "/analysis", wsHref: "/keyword/analyze" },
   { label: "콘텐츠 아이디어", icon: FileText, href: "/production", wsHref: "/keyword/ideas" },
 ];
 
 interface StepperProps {
-  currentStep: 1 | 2 | 3;
+  currentStep: 1 | 2;
 }
 
 export function Stepper({ currentStep }: StepperProps) {

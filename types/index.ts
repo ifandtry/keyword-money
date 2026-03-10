@@ -107,15 +107,8 @@ export interface MoneyKeywordItem {
 
 export interface DiscoveryResponse {
   keywords: MoneyKeywordItem[];
+  relatedKeywords: MoneyKeywordItem[];
   seed: string;
-  analyzedAt: string;
-}
-
-export interface ExpansionResponse {
-  mainKeyword: MoneyKeywordItem;
-  subKeywords: MoneyKeywordItem[];
-  allCandidates: MoneyKeywordItem[];
-  topBlogs: BlogReference[];
   analyzedAt: string;
 }
 

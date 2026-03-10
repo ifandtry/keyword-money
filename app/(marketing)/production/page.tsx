@@ -21,6 +21,8 @@ import {
   ListOrdered,
   Plus,
   X,
+  Search,
+  ArrowRight,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 
@@ -154,7 +156,7 @@ function ProductionContent() {
       />
       <Toaster richColors />
       <div className="container mx-auto px-4">
-        <Stepper currentStep={3} />
+        <Stepper currentStep={2} />
 
         <section className="max-w-2xl mx-auto mb-8 text-center">
           <h1 className="text-2xl font-bold mb-2">콘텐츠 아이디어 구상</h1>
@@ -229,6 +231,18 @@ function ProductionContent() {
                   </>
                 )}
               </Button>
+              {!hasParams && !data && !loading && (
+                <div className="mt-3 pt-3 border-t border-border/20">
+                  <Link
+                    href="/keyword/discover"
+                    className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    돈이 되는 키워드 탐색이 필요한 경우
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              )}
             </div>
           </section>
         )}
