@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/workspace/PageHeader";
@@ -23,6 +23,14 @@ import {
 import type { TopPostsAnalysis } from "@/types/blog";
 
 export default function TopInsightsPage() {
+  return (
+    <Suspense fallback={<div className="max-w-4xl mx-auto py-12 text-center text-muted-foreground">로딩 중...</div>}>
+      <TopInsightsContent />
+    </Suspense>
+  );
+}
+
+function TopInsightsContent() {
   const searchParams = useSearchParams();
   const initialKeyword = searchParams.get("keyword") || "";
 
