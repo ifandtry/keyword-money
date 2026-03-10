@@ -594,7 +594,7 @@ function DiscoveryContent() {
               <div>
                 <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-600" />
-                  네이버 광고 API 기반 탐색
+                  AI 기반 탐색
                   <span className="text-sm font-normal text-muted-foreground">
                     {filteredAds.length}개
                     {filteredAds.length !== totalAdsCount && (
