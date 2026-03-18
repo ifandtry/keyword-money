@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { logClientEvent } from "@/lib/logClient";
 import { PageHeader } from "@/components/workspace/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ function TopInsightsContent() {
     const query = (q ?? keyword).trim();
     if (!query) return;
 
+    logClientEvent("blog_cta_click", { cta: "top_insights_analyze", keyword: query });
     setLoading(true);
     setError("");
     setResult(null);

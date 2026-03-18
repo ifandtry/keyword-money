@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { logClientEvent } from "@/lib/logClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +173,7 @@ function DiscoveryContent() {
   }, []);
 
   const handleKeywordClick = (kw: MoneyKeywordItem) => {
+    logClientEvent("keyword_result_click", { keyword: kw.keyword, moneyScore: kw.moneyScore });
     setKeyword(kw.keyword);
     handleSearch(kw.keyword);
   };
@@ -835,6 +837,7 @@ function DiscoveryContent() {
                     <Button
                       className="gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 hover:text-blue-800 shadow-none"
                       onClick={() => {
+                        logClientEvent("discover_cta_click", { cta: "content_ideas", mainKeyword: displayMain?.keyword });
                         const base = pathname.startsWith("/keyword/") ? "/keyword/ideas" : "/production";
                         const subParams = displaySubs.map((s) => s.keyword).join(",");
                         router.push(
@@ -972,6 +975,7 @@ function DiscoveryContent() {
                         variant="outline"
                         className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 hover:border-green-400 transition-all"
                         onClick={() => {
+                          logClientEvent("discover_cta_click", { cta: "top_insights", mainKeyword: displayMain?.keyword });
                           const base = pathname.startsWith("/keyword/") ? "/blog/top-insights" : "/blog/top-insights";
                           router.push(`${base}?keyword=${encodeURIComponent(displayMain?.keyword ?? "")}`);
                         }}

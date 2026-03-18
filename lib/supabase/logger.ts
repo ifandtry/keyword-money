@@ -31,7 +31,15 @@ export type EventType =
   | "review_program_cta_submit_clicked"
   | "review_program_submitted"
   | "review_program_dismissed"
-  | "feature_blocked_review_offer_shown";
+  | "feature_blocked_review_offer_shown"
+  | "home_search"
+  | "home_cta_click"
+  | "trending_keyword_click"
+  | "keyword_result_click"
+  | "discover_cta_click"
+  | "content_copy"
+  | "review_page_cta_click"
+  | "blog_cta_click";
 
 export function logEvent(
   eventType: EventType,

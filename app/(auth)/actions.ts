@@ -44,7 +44,7 @@ export async function signup(formData: FormData) {
   }
 
   logEvent("signup", {}, data.user?.id);
-  redirect("/");
+  return { success: true, email: formData.get("email") as string };
 }
 
 export async function logout() {

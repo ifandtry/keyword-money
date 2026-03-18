@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { logClientEvent } from "@/lib/logClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,6 +120,7 @@ function TrendingTicker({ keywords }: { keywords: string[] }) {
           <Link
             key={`${kw}-${i}`}
             href={`/keyword/discover?q=${encodeURIComponent(kw)}`}
+            onClick={() => logClientEvent("trending_keyword_click", { keyword: kw })}
             className="shrink-0 rounded-full border border-border/30 bg-background px-3 py-1 text-xs text-muted-foreground hover:border-primary/30 hover:text-primary transition-colors"
           >
             {kw}
@@ -184,6 +186,7 @@ export default function WorkspaceHome() {
 
   const handleSearch = () => {
     if (keyword.trim()) {
+      logClientEvent("home_search", { keyword: keyword.trim() });
       router.push(`/keyword/discover?q=${encodeURIComponent(keyword.trim())}`);
     }
   };
@@ -265,6 +268,7 @@ export default function WorkspaceHome() {
               <Link
                 key={card.href}
                 href={card.href}
+                onClick={() => logClientEvent("home_cta_click", { title: card.title, href: card.href })}
                 className="group rounded-2xl border border-border/30 p-5 hover:border-border/60 hover:shadow-sm transition-all duration-200"
               >
                 <div className="flex items-start gap-3">

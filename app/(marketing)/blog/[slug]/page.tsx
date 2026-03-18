@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
 import { Badge } from "@/components/ui/badge";
+import BlogViewCounter from "@/components/blog/BlogViewCounter";
 import type { Metadata } from "next";
 
 interface Props {
@@ -57,13 +58,16 @@ export default async function BlogPostPage({ params }: Props) {
             >
               &larr; 블로그 목록
             </Link>
-            <time className="block mt-4 text-sm text-muted-foreground">
-              {new Date(post.date).toLocaleDateString("ko-KR", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </time>
+            <div className="flex items-center gap-3 mt-4">
+              <time className="text-sm text-muted-foreground">
+                {new Date(post.date).toLocaleDateString("ko-KR", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </time>
+              <BlogViewCounter slug={slug} increment />
+            </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl leading-tight">
               {post.title}
             </h1>

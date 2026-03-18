@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { logClientEvent } from "@/lib/logClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +123,7 @@ function ProductionContent() {
   };
 
   const copyTitle = async (title: string, idx: number) => {
+    logClientEvent("content_copy", { type: "title", keyword: mainKeyword });
     await navigator.clipboard.writeText(title);
     toast.success("제목이 복사되었습니다!");
     setCopiedIdx(idx);
@@ -130,6 +132,7 @@ function ProductionContent() {
 
   const copyOutline = async () => {
     if (!data) return;
+    logClientEvent("content_copy", { type: "outline", keyword: mainKeyword });
     const text = [
       `# ${data.outline.title}`,
       "",

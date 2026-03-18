@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { logClientEvent } from "@/lib/logClient";
 import { PageHeader } from "@/components/workspace/PageHeader";
 
 export default function ReviewProgramPage() {
@@ -46,12 +49,14 @@ export default function ReviewProgramPage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <Link
           href="/review-program/submit"
+          onClick={() => logClientEvent("review_page_cta_click", { cta: "submit" })}
           className="flex-1 text-center px-6 py-3 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           후기 인증 제출하기
         </Link>
         <Link
           href="/keyword/discover"
+          onClick={() => logClientEvent("review_page_cta_click", { cta: "try_service" })}
           className="flex-1 text-center px-6 py-3 rounded-xl text-sm font-semibold border border-border hover:bg-muted/50 transition-colors"
         >
           서비스 먼저 사용해보기

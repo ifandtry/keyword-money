@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAllPosts } from "@/lib/blog";
 import { Badge } from "@/components/ui/badge";
+import BlogViewCounter from "@/components/blog/BlogViewCounter";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -35,13 +36,16 @@ export default function BlogListPage() {
                   href={`/blog/${post.slug}`}
                   className="block group rounded-2xl border border-border/30 bg-background p-6 shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-200"
                 >
-                  <time className="text-xs text-muted-foreground">
-                    {new Date(post.date).toLocaleDateString("ko-KR", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </time>
+                  <div className="flex items-center gap-3">
+                    <time className="text-xs text-muted-foreground">
+                      {new Date(post.date).toLocaleDateString("ko-KR", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </time>
+                    <BlogViewCounter slug={post.slug} />
+                  </div>
                   <h2 className="mt-1.5 text-xl font-semibold group-hover:text-primary transition-colors">
                     {post.title}
                   </h2>

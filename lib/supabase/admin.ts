@@ -104,9 +104,29 @@ interface Database {
           metadata: Record<string, unknown>;
         }>;
       };
+      blog_views: {
+        Row: {
+          slug: string;
+          count: number;
+          updated_at: string;
+        };
+        Insert: {
+          slug: string;
+          count?: number;
+        };
+        Update: Partial<{
+          count: number;
+          updated_at: string;
+        }>;
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      increment_blog_view: {
+        Args: { post_slug: string };
+        Returns: number;
+      };
+    };
     Enums: Record<string, never>;
   };
 }
