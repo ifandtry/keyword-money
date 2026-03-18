@@ -32,7 +32,7 @@ export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModal
           <h2 className="text-xl font-bold leading-snug">
             블로그 후기 남기고
             <br />
-            <span className="text-primary">1년 무제한 이용권 받기</span>
+            <span className="text-primary">6개월 무제한 이용권 받기</span>
           </h2>
         </div>
 
@@ -49,7 +49,7 @@ export function ReviewProgramModal({ open, onClose, source }: ReviewProgramModal
             네이버 블로그 후기를 작성해주시면
           </p>
           <p className="mt-3 font-semibold text-foreground">
-            1년 동안 무제한으로 사용할 수 있는<br />
+            6개월 동안 무제한으로 사용할 수 있는<br />
             구독권을 선물로 드리고 있습니다.
           </p>
           <p className="mt-3">앞으로도 많은 관심과 피드백 부탁드립니다.</p>

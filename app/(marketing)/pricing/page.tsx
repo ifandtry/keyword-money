@@ -14,7 +14,7 @@ export default function PricingPage() {
       <p className="text-muted-foreground mb-8 leading-relaxed">
         키워드머니는 아직 초기 단계입니다.<br />
         네이버 블로그 후기를 작성해주시면<br />
-        <span className="font-semibold text-foreground">1년 무제한 이용권</span>을 선물로 드리고 있습니다.
+        <span className="font-semibold text-foreground">6개월 무제한 이용권</span>을 선물로 드리고 있습니다.
       </p>
 
       <div className="space-y-3">

@@ -9,7 +9,7 @@ export default function ReviewProgramPage() {
     <div className="max-w-2xl mx-auto">
       <PageHeader
         title="초기 사용자 프로그램"
-        description="블로그 후기를 남기고 1년 무제한 이용권을 받으세요"
+        description="블로그 후기를 남기고 6개월 무제한 이용권을 받으세요"
       />
 
       {/* 안내 */}
@@ -19,7 +19,7 @@ export default function ReviewProgramPage() {
           {[
             { step: "1", title: "서비스 사용해보기", desc: "키워드 탐색, 콘텐츠 아이디어 등 기능을 자유롭게 사용해보세요." },
             { step: "2", title: "네이버 블로그에 후기 작성", desc: "사용 경험을 솔직하게 블로그에 작성해주세요. 스크린샷 포함 시 더 좋습니다." },
-            { step: "3", title: "후기 인증 제출", desc: "작성한 블로그 글 URL을 제출하면 검토 후 1년 무제한 이용권이 지급됩니다." },
+            { step: "3", title: "후기 인증 제출", desc: "작성한 블로그 글 URL을 제출하면 검토 후 6개월 무제한 이용권이 지급됩니다." },
           ].map((item) => (
             <div key={item.step} className="flex gap-3">
               <div className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-sm font-bold">

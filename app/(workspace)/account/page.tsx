@@ -53,7 +53,7 @@ export default function AccountPage() {
         </div>
         {plan === "free" && (
           <p className="text-sm text-muted-foreground">
-            블로그 후기를 작성하시면 1년 무제한 이용권을 받을 수 있습니다.
+            블로그 후기를 작성하시면 6개월 무제한 이용권을 받을 수 있습니다.
           </p>
         )}
       </div>
@@ -114,7 +114,7 @@ export default function AccountPage() {
       <div className="rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-6">
         <h2 className="text-lg font-semibold mb-2">초기 사용자 프로그램</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          블로그 후기를 작성해주시면 1년 무제한 이용권을 선물로 드립니다.
+          블로그 후기를 작성해주시면 6개월 무제한 이용권을 선물로 드립니다.
         </p>
         <Link
           href="/review-program"
