@@ -34,37 +34,39 @@ export default function BlogListPage() {
                 <Link
                   key={post.slug}
                   href={`/blog/${post.slug}`}
-                  className="block group rounded-2xl border border-border/30 bg-background p-6 shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-200"
+                  className="relative block group rounded-2xl border border-border/30 bg-background p-6 shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-200"
                 >
-                  <div className="flex items-center gap-3">
-                    <time className="text-xs text-muted-foreground">
-                      {new Date(post.date).toLocaleDateString("ko-KR", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </time>
-                    <BlogViewCounter slug={post.slug} />
-                  </div>
+                  <time className="text-xs text-muted-foreground">
+                    {new Date(post.date).toLocaleDateString("ko-KR", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </time>
                   <h2 className="mt-1.5 text-xl font-semibold group-hover:text-primary transition-colors">
                     {post.title}
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground leading-relaxed line-clamp-2">
                     {post.description}
                   </p>
-                  {post.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {post.tags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
+                  <div className="mt-3 flex items-end justify-between">
+                    {post.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {post.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+                    <BlogViewCounter slug={post.slug} />
+                  </div>
                 </Link>
               ))}
             </div>
