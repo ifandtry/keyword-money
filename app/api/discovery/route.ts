@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
       analyzedAt: new Date().toISOString(),
     };
 
-    logEvent("discovery", { keyword: seed, result_count: adsScored.length + acScored.length });
+    logEvent("discovery", { keyword: seed, result_count: adsScored.length + acScored.length }, user?.id);
 
     return NextResponse.json(response);
   } catch (error) {

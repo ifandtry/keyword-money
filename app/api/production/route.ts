@@ -127,7 +127,7 @@ ${subList}
       sub_keywords: subs.join(", "),
       openai_tokens: totalTokens.prompt_tokens + totalTokens.completion_tokens,
       openai_cost_usd: calcOpenAICost(totalTokens),
-    });
+    }, user?.id);
 
     return NextResponse.json(response);
   } catch (error) {
