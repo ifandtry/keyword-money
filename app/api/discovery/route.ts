@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createVolumeProvider } from "@/lib/providers/volumeProvider";
 import { createSerpProvider } from "@/lib/providers/serpProvider";
 import { generateRelatedKeywords } from "@/lib/providers/relatedKeywords";
-import { calculateFinalScore } from "@/lib/scoring/moneyScore";
-import { DiscoveryResponse, MoneyKeywordItem } from "@/types";
+import { calculateFinalScore, getCommercialWeight } from "@/lib/scoring/moneyScore";
+import {
+  DiscoveryRelatedKeywordItem,
+  DiscoveryRelatedKeywordsDebug,
+  DiscoveryResponse,
+  MoneyKeywordItem,
+} from "@/types";
 import { logEvent } from "@/lib/supabase/logger";
 import { createClient } from "@/lib/supabase/server";
 import { checkAndIncrementUsage } from "@/lib/usage";
@@ -11,8 +16,9 @@ import { checkAndIncrementUsage } from "@/lib/usage";
 // 네이버 자동완성 연관검색어
 async function fetchAutoComplete(keyword: string): Promise<string[]> {
   try {
+    const seed = keyword.trim();
     const res = await fetch(
-      `https://ac.search.naver.com/nx/ac?q=${encodeURIComponent(keyword)}&con=1&frm=nv&ans=2&r_format=json&r_enc=UTF-8&r_unicode=0&t_koreng=1&run=2&rev=4&q_enc=UTF-8&st=100`,
+      `https://ac.search.naver.com/nx/ac?q=${encodeURIComponent(seed)}&con=1&frm=nv&ans=2&r_format=json&r_enc=UTF-8&r_unicode=0&t_koreng=1&run=2&rev=4&q_enc=UTF-8&st=100`,
       {
         headers: {
           "User-Agent":
@@ -24,23 +30,51 @@ async function fetchAutoComplete(keyword: string): Promise<string[]> {
     const data = await res.json();
     const items: string[][] = data.items?.[0] || [];
     return items
-      .map((item) => item[0])
-      .filter((kw) => kw !== keyword && kw.length > 1);
+      .map((item) => String(item[0] || "").trim())
+      .filter((kw) => kw !== seed && kw.length > 1);
   } catch {
     return [];
   }
 }
 
+type VolumeLookupItem = {
+  keyword: string;
+  pcVolume: number;
+  mobileVolume: number;
+  totalVolume: number;
+  cpc: number;
+};
+
+type SerpLookupItem = {
+  totalDocCount: number;
+};
+
+function normalizeKeywordForMatch(keyword: string): string {
+  return keyword.trim();
+}
+
+function uniqueKeywordsByTrim(keywords: string[]): string[] {
+  const seen = new Set<string>();
+
+  return keywords.filter((keyword) => {
+    const normalizedKeyword = normalizeKeywordForMatch(keyword);
+    if (!normalizedKeyword || seen.has(normalizedKeyword)) return false;
+    seen.add(normalizedKeyword);
+    return true;
+  });
+}
+
 function buildScoredItems(
   keywords: string[],
-  volumeMap: Map<string, { keyword: string; pcVolume: number; mobileVolume: number; totalVolume: number; cpc: number }>,
-  serpMap: Map<string, { totalDocCount: number }>
+  volumeMap: Map<string, VolumeLookupItem>,
+  serpMap: Map<string, SerpLookupItem>
 ): MoneyKeywordItem[] {
   return keywords
     .map((kw) => {
-      const vol = volumeMap.get(kw);
-      const serp = serpMap.get(kw);
-      if (!vol || !serp) return null;
+      const normalizedKeyword = normalizeKeywordForMatch(kw);
+      const vol = volumeMap.get(normalizedKeyword);
+      const serp = serpMap.get(normalizedKeyword);
+      if (!vol || !serp || serp.totalDocCount <= 0) return null;
 
       const result = calculateFinalScore({
         keyword: kw,
@@ -62,8 +96,93 @@ function buildScoredItems(
       } as MoneyKeywordItem;
     })
     .filter((item): item is MoneyKeywordItem => item !== null)
-    .filter((item) => Math.log(item.totalDocCount + 1) > 0)
     .sort((a, b) => b.moneyScore - a.moneyScore);
+}
+
+function buildRelatedKeywordItems(
+  keywords: string[],
+  volumeMap: Map<string, VolumeLookupItem>,
+  serpMap: Map<string, SerpLookupItem>
+): DiscoveryRelatedKeywordItem[] {
+  return keywords.map((keyword) => {
+    const normalizedKeyword = normalizeKeywordForMatch(keyword);
+    const volume = volumeMap.get(normalizedKeyword);
+    const serp = serpMap.get(normalizedKeyword);
+    const hasVolumeData = !!volume;
+    const hasSerpData = !!serp && serp.totalDocCount > 0;
+    const { weight: commercialWeight, tokens: commercialTokens } =
+      getCommercialWeight(keyword);
+
+    const item: DiscoveryRelatedKeywordItem = {
+      keyword,
+      pcVolume: volume?.pcVolume ?? null,
+      mobileVolume: volume?.mobileVolume ?? null,
+      totalVolume: volume?.totalVolume ?? null,
+      totalDocCount: hasSerpData ? serp.totalDocCount : null,
+      moneyScore: null,
+      commercialWeight,
+      volumeWeight: volume ? Number(Math.log(volume.totalVolume + 1).toFixed(4)) : null,
+      finalScore: null,
+      commercialTokens,
+      hasVolumeData,
+      hasSerpData,
+    };
+
+    if (!hasVolumeData && !hasSerpData) {
+      item.debugReason = "missing_volume_and_serp_data";
+      return item;
+    }
+
+    if (!hasVolumeData) {
+      item.debugReason = "missing_volume_data";
+      item.volumeWeight = null;
+      return item;
+    }
+
+    if (!hasSerpData) {
+      item.debugReason = "missing_serp_data";
+      return item;
+    }
+
+    const result = calculateFinalScore({
+      keyword,
+      volume: volume.totalVolume,
+      docs: serp.totalDocCount,
+    });
+
+    item.moneyScore = result.moneyScore;
+    item.commercialWeight = result.commercialWeight;
+    item.volumeWeight = result.volumeWeight;
+    item.finalScore = result.finalScore;
+    item.commercialTokens = result.commercialTokens;
+
+    return item;
+  });
+}
+
+function buildRelatedKeywordsDebug(
+  items: DiscoveryRelatedKeywordItem[]
+): DiscoveryRelatedKeywordsDebug {
+  return {
+    sourceCount: items.length,
+    volumeMappedCount: items.filter((item) => item.hasVolumeData).length,
+    serpAnalyzedCount: items.filter((item) => item.hasSerpData).length,
+    scoredCount: items.filter((item) => item.moneyScore !== null && item.moneyScore !== undefined).length,
+    missingVolumeKeywords: items
+      .filter(
+        (item) =>
+          item.debugReason === "missing_volume_data" ||
+          item.debugReason === "missing_volume_and_serp_data"
+      )
+      .map((item) => item.keyword),
+    missingSerpKeywords: items
+      .filter(
+        (item) =>
+          item.debugReason === "missing_serp_data" ||
+          item.debugReason === "missing_volume_and_serp_data"
+      )
+      .map((item) => item.keyword),
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -112,11 +231,21 @@ export async function POST(request: NextRequest) {
     } else {
       adsKeywords = generateRelatedKeywords(seed);
     }
-    adsKeywords = adsKeywords.slice(0, 30);
+    const autoCompleteKeywordSet = new Set(
+      acKeywords.map((kw) => normalizeKeywordForMatch(kw)).filter(Boolean)
+    );
+
+    adsKeywords = uniqueKeywordsByTrim(adsKeywords)
+      .filter((kw) => !autoCompleteKeywordSet.has(normalizeKeywordForMatch(kw)))
+      .slice(0, 30);
 
     // 연관검색어 중 광고 API에 없는 것만 추려서 검색량 보강
-    const volumeMap = new Map(volumeData.map((v) => [v.keyword, v]));
-    const acOnly = acKeywords.filter((kw) => !volumeMap.has(kw));
+    const volumeMap = new Map(
+      volumeData.map((v) => [normalizeKeywordForMatch(v.keyword), v])
+    );
+    const acOnly = uniqueKeywordsByTrim(acKeywords).filter(
+      (kw) => !volumeMap.has(normalizeKeywordForMatch(kw))
+    );
 
     // 누락된 자동완성 키워드를 5개씩 배치로 검색량 조회
     for (let i = 0; i < acOnly.length; i += 5) {
@@ -126,35 +255,39 @@ export async function POST(request: NextRequest) {
       );
       for (const results of batchResults) {
         for (const v of results) {
-          if (!volumeMap.has(v.keyword)) volumeMap.set(v.keyword, v);
+          const normalizedKeyword = normalizeKeywordForMatch(v.keyword);
+          if (!volumeMap.has(normalizedKeyword)) volumeMap.set(normalizedKeyword, v);
         }
       }
     }
 
     // 분석 대상 키워드 합치기 (SERP 한번에 조회)
-    const allKeywordsSet = new Set([...adsKeywords, ...acKeywords]);
-    const allKeywords = Array.from(allKeywordsSet);
+    const allKeywords = uniqueKeywordsByTrim([...adsKeywords, ...acKeywords]);
 
     // 2: SERP 분석 (문서수)
     const serpData = await serpProvider.analyze(allKeywords);
-    const serpMap = new Map(serpData.map((s, i) => [allKeywords[i], s]));
+    const serpMap = new Map(
+      serpData.map((item) => [normalizeKeywordForMatch(item.keyword), item])
+    );
 
     // 3: 각각 스코어링
     const adsScored = buildScoredItems(adsKeywords, volumeMap, serpMap);
-    const acScored = buildScoredItems(
-      acKeywords.filter((kw) => volumeMap.has(kw)),
-      volumeMap,
-      serpMap
-    );
+    const relatedKeywords = buildRelatedKeywordItems(acKeywords, volumeMap, serpMap);
+    const relatedKeywordsDebug = buildRelatedKeywordsDebug(relatedKeywords);
 
     const response: DiscoveryResponse = {
       keywords: adsScored,
-      relatedKeywords: acScored,
+      relatedKeywords,
+      relatedKeywordsDebug,
       seed,
       analyzedAt: new Date().toISOString(),
     };
 
-    logEvent("discovery", { keyword: seed, result_count: adsScored.length + acScored.length }, user?.id);
+    logEvent(
+      "discovery",
+      { keyword: seed, result_count: adsScored.length + relatedKeywords.length },
+      user?.id
+    );
 
     return NextResponse.json(response);
   } catch (error) {

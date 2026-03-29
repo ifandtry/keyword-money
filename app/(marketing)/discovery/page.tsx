@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stepper } from "@/components/Stepper";
 import { useUsageLimit } from "@/hooks/useUsageLimit";
-import { DiscoveryResponse, MoneyKeywordItem, TrendingCategory, BlogReference } from "@/types";
+import {
+  BlogReference,
+  DiscoveryRelatedKeywordItem,
+  DiscoveryResponse,
+  MoneyKeywordItem,
+  TrendingCategory,
+} from "@/types";
 import { ReviewProgramModal } from "@/components/ReviewProgramModal";
 import {
   Dialog,
@@ -50,6 +56,72 @@ import {
 import { Toaster, toast } from "sonner";
 
 type SortKey = "moneyScore" | "totalVolume" | "totalDocCount" | "finalScore" | "saturation";
+
+function hasNumericValue(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function formatOptionalNumber(value: number | null | undefined): string {
+  return hasNumericValue(value) ? value.toLocaleString() : "-";
+}
+
+function formatOptionalScore(value: number | null | undefined): string {
+  return hasNumericValue(value) ? value.toFixed(2) : "-";
+}
+
+function getMoneyScoreTier(value: number): "jackpot" | "great" | "good" | "normal" {
+  if (value >= 1.2) return "jackpot";
+  if (value >= 1.0) return "great";
+  if (value >= 0.8) return "good";
+  return "normal";
+}
+
+function getSaturationValue(item: {
+  totalVolume?: number | null;
+  totalDocCount?: number | null;
+}): number | null {
+  if (
+    !hasNumericValue(item.totalVolume) ||
+    !hasNumericValue(item.totalDocCount) ||
+    item.totalVolume <= 0 ||
+    item.totalDocCount <= 0
+  ) {
+    return null;
+  }
+
+  return item.totalDocCount / item.totalVolume;
+}
+
+function toMoneyKeywordItem(
+  item: DiscoveryRelatedKeywordItem
+): MoneyKeywordItem | null {
+  if (
+    !hasNumericValue(item.pcVolume) ||
+    !hasNumericValue(item.mobileVolume) ||
+    !hasNumericValue(item.totalVolume) ||
+    !hasNumericValue(item.totalDocCount) ||
+    !hasNumericValue(item.moneyScore) ||
+    !hasNumericValue(item.commercialWeight) ||
+    !hasNumericValue(item.volumeWeight) ||
+    !hasNumericValue(item.finalScore) ||
+    !Array.isArray(item.commercialTokens)
+  ) {
+    return null;
+  }
+
+  return {
+    keyword: item.keyword,
+    pcVolume: item.pcVolume,
+    mobileVolume: item.mobileVolume,
+    totalVolume: item.totalVolume,
+    totalDocCount: item.totalDocCount,
+    moneyScore: item.moneyScore,
+    commercialWeight: item.commercialWeight,
+    volumeWeight: item.volumeWeight,
+    finalScore: item.finalScore,
+    commercialTokens: item.commercialTokens,
+  };
+}
 
 export default function DiscoveryPage() {
   return (
@@ -172,14 +244,14 @@ function DiscoveryContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleKeywordClick = (kw: MoneyKeywordItem) => {
-    logClientEvent("keyword_result_click", { keyword: kw.keyword, moneyScore: kw.moneyScore });
+  const handleKeywordClick = (kw: {
+    keyword: string;
+    moneyScore?: number | null;
+  }) => {
+    logClientEvent("keyword_result_click", { keyword: kw.keyword, moneyScore: kw.moneyScore ?? null });
     setKeyword(kw.keyword);
     handleSearch(kw.keyword);
   };
-
-  const getSaturation = (item: MoneyKeywordItem) =>
-    item.totalVolume > 0 ? item.totalDocCount / item.totalVolume : 999;
 
   const applyFilterSort = useCallback(
     (items: MoneyKeywordItem[]) => {
@@ -191,9 +263,23 @@ function DiscoveryContent() {
         filtered = filtered.filter((item) => item.totalDocCount <= maxDocs);
       }
       return [...filtered].sort((a, b) => {
-        if (sortKey === "totalDocCount") return a[sortKey] - b[sortKey];
-        if (sortKey === "saturation") return getSaturation(a) - getSaturation(b);
-        return b[sortKey] - a[sortKey];
+        switch (sortKey) {
+          case "moneyScore":
+            return b.moneyScore - a.moneyScore;
+          case "totalVolume":
+            return b.totalVolume - a.totalVolume;
+          case "totalDocCount":
+            return a.totalDocCount - b.totalDocCount;
+          case "finalScore":
+            return b.finalScore - a.finalScore;
+          case "saturation":
+            return (
+              (getSaturationValue(a) ?? Number.POSITIVE_INFINITY) -
+              (getSaturationValue(b) ?? Number.POSITIVE_INFINITY)
+            );
+          default:
+            return 0;
+        }
       });
     },
     [minVolume, maxDocs, sortKey]
@@ -207,8 +293,16 @@ function DiscoveryContent() {
 
   const filteredRelated = useMemo(() => {
     if (!data) return [];
-    return applyFilterSort(data.relatedKeywords ?? []);
-  }, [data, applyFilterSort]);
+    return data.relatedKeywords ?? [];
+  }, [data]);
+
+  const scoredRelated = useMemo(() => {
+    if (!data) return [];
+
+    return data.relatedKeywords
+      .map((item) => toMoneyKeywordItem(item))
+      .filter((item): item is MoneyKeywordItem => item !== null);
+  }, [data]);
 
   const totalAdsCount = data?.keywords.length ?? 0;
   const totalRelatedCount = data?.relatedKeywords?.length ?? 0;
@@ -216,7 +310,7 @@ function DiscoveryContent() {
   // 메인/서브 키워드 추천
   const recommended = useMemo(() => {
     if (!data) return null;
-    const all = [...filteredAds, ...filteredRelated];
+    const all = [...filteredAds, ...scoredRelated];
     // 중복 제거 (keyword 기준, 먼저 나온 것 우선)
     const seen = new Set<string>();
     const unique = all.filter((item) => {
@@ -241,7 +335,7 @@ function DiscoveryContent() {
     );
     const subs = [...related, ...others].slice(0, 3);
     return { main, subs };
-  }, [data, filteredAds, filteredRelated]);
+  }, [data, filteredAds, scoredRelated]);
 
   // 실제 표시될 메인/서브 (오버라이드 우선)
   const displayMain = overrideMain ?? recommended?.main ?? null;
@@ -249,7 +343,7 @@ function DiscoveryContent() {
 
   // 선택 다이얼로그용 전체 키워드 목록 (중복 제거, FinalScore순)
   const allCandidates = useMemo(() => {
-    const all = [...filteredAds, ...filteredRelated];
+    const all = [...filteredAds, ...scoredRelated];
     const seen = new Set<string>();
     return all
       .filter((item) => {
@@ -258,7 +352,7 @@ function DiscoveryContent() {
         return true;
       })
       .sort((a, b) => b.finalScore - a.finalScore);
-  }, [filteredAds, filteredRelated]);
+  }, [filteredAds, scoredRelated]);
 
   const handleSelectKeyword = (item: MoneyKeywordItem) => {
     if (changeTarget === "main") {
@@ -487,7 +581,7 @@ function DiscoveryContent() {
               <div>
                 <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                   <Search className="h-4 w-4 text-green-600" />
-                  네이버 연관검색어
+                  네이버 자동완성 키워드
                   <span className="text-sm font-normal text-muted-foreground">
                     {filteredRelated.length}개
                     {filteredRelated.length !== totalRelatedCount && (
@@ -497,7 +591,7 @@ function DiscoveryContent() {
                 </h3>
                 {filteredRelated.length === 0 ? (
                   <div className="rounded-2xl border border-border/30 p-8 text-center text-muted-foreground">
-                    연관검색어 결과가 없습니다.
+                    자동완성 결과가 없습니다.
                   </div>
                 ) : (
                   <div className="rounded-2xl overflow-x-auto border border-border/30 shadow-sm">
@@ -513,69 +607,67 @@ function DiscoveryContent() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(showAllRelated ? filteredRelated : filteredRelated.slice(0, 10)).map((item) => (
-                          <TableRow
-                            key={item.keyword}
-                            className="cursor-pointer hover:bg-primary/5 transition-colors"
-                            onClick={() => handleKeywordClick(item)}
-                          >
-                            <TableCell className="font-medium whitespace-nowrap">
-                              {item.keyword}
-                              {item.commercialTokens.length > 0 && (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
-                                >
-                                  {item.commercialTokens.join(" ")}
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {item.totalVolume.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.totalDocCount > 0
-                                ? item.totalDocCount.toLocaleString()
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {item.totalDocCount > 0 && item.totalVolume > 0 ? (
-                                <span
-                                  className={
-                                    getSaturation(item) < 5
-                                      ? "text-green-600 font-medium"
-                                      : getSaturation(item) > 50
-                                        ? "text-red-500"
-                                        : "text-muted-foreground"
-                                  }
-                                >
-                                  {getSaturation(item).toFixed(1)}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span
-                                className="money-score-gold"
-                                data-tier={
-                                  item.moneyScore >= 1.2
-                                    ? "jackpot"
-                                    : item.moneyScore >= 1.0
-                                      ? "great"
-                                      : item.moneyScore >= 0.8
-                                        ? "good"
-                                        : "normal"
-                                }
-                              >
-                                {item.moneyScore.toFixed(2)}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {(showAllRelated ? filteredRelated : filteredRelated.slice(0, 10)).map((item, index) => {
+                          const saturation = getSaturationValue(item);
+
+                          return (
+                            <TableRow
+                              key={`${item.keyword}-${index}`}
+                              className="cursor-pointer hover:bg-primary/5 transition-colors"
+                              onClick={() => handleKeywordClick(item)}
+                            >
+                              <TableCell className="font-medium whitespace-nowrap">
+                                {item.keyword}
+                                {(item.commercialTokens?.length ?? 0) > 0 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
+                                  >
+                                    {item.commercialTokens?.join(" ")}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatOptionalNumber(item.totalVolume)}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                {formatOptionalNumber(item.totalDocCount)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {saturation !== null ? (
+                                  <span
+                                    className={
+                                      saturation < 5
+                                        ? "text-green-600 font-medium"
+                                        : saturation > 50
+                                          ? "text-red-500"
+                                          : "text-muted-foreground"
+                                    }
+                                  >
+                                    {saturation.toFixed(1)}
+                                  </span>
+                                ) : (
+                                  "-"
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {hasNumericValue(item.moneyScore) ? (
+                                  <span
+                                    className="money-score-gold"
+                                    data-tier={getMoneyScoreTier(item.moneyScore)}
+                                  >
+                                    {formatOptionalScore(item.moneyScore)}
+                                  </span>
+                                ) : (
+                                  "-"
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -623,80 +715,76 @@ function DiscoveryContent() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(showAllAds ? filteredAds : filteredAds.slice(0, 10)).map((item) => (
-                          <TableRow
-                            key={item.keyword}
-                            className="cursor-pointer hover:bg-primary/5 transition-colors"
-                            onClick={() => handleKeywordClick(item)}
-                          >
-                            <TableCell className="font-medium whitespace-nowrap">
-                              {item.keyword}
-                              {item.commercialTokens.length > 0 && (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
-                                >
-                                  {item.commercialTokens.join(" ")}
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {item.totalVolume.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {item.totalDocCount > 0
-                                ? item.totalDocCount.toLocaleString()
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {item.totalDocCount > 0 && item.totalVolume > 0 ? (
+                        {(showAllAds ? filteredAds : filteredAds.slice(0, 10)).map((item) => {
+                          const saturation = getSaturationValue(item);
+
+                          return (
+                            <TableRow
+                              key={item.keyword}
+                              className="cursor-pointer hover:bg-primary/5 transition-colors"
+                              onClick={() => handleKeywordClick(item)}
+                            >
+                              <TableCell className="font-medium whitespace-nowrap">
+                                {item.keyword}
+                                {item.commercialTokens.length > 0 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-2 text-[10px] bg-amber-50 text-amber-700 border-amber-200"
+                                  >
+                                    {item.commercialTokens.join(" ")}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {item.totalVolume.toLocaleString()}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                {item.totalDocCount > 0
+                                  ? item.totalDocCount.toLocaleString()
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {saturation !== null ? (
+                                  <span
+                                    className={
+                                      saturation < 5
+                                        ? "text-green-600 font-medium"
+                                        : saturation > 50
+                                          ? "text-red-500"
+                                          : "text-muted-foreground"
+                                    }
+                                  >
+                                    {saturation.toFixed(1)}
+                                  </span>
+                                ) : (
+                                  "-"
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
                                 <span
-                                  className={
-                                    getSaturation(item) < 5
-                                      ? "text-green-600 font-medium"
-                                      : getSaturation(item) > 50
-                                        ? "text-red-500"
-                                        : "text-muted-foreground"
-                                  }
+                                  className="money-score-gold"
+                                  data-tier={getMoneyScoreTier(item.moneyScore)}
                                 >
-                                  {getSaturation(item).toFixed(1)}
+                                  {item.moneyScore.toFixed(2)}
                                 </span>
-                              ) : (
-                                "-"
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <span
-                                className="money-score-gold"
-                                data-tier={
-                                  item.moneyScore >= 1.2
-                                    ? "jackpot"
-                                    : item.moneyScore >= 1.0
-                                      ? "great"
-                                      : item.moneyScore >= 0.8
-                                        ? "good"
-                                        : "normal"
-                                }
-                              >
-                                {item.moneyScore.toFixed(2)}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {item.commercialWeight > 1 ? (
-                                <Badge className="bg-amber-500 text-white text-xs">
-                                  x{item.commercialWeight}
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  -
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {item.commercialWeight > 1 ? (
+                                  <Badge className="bg-amber-500 text-white text-xs">
+                                    x{item.commercialWeight}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    -
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -760,12 +848,7 @@ function DiscoveryContent() {
                           <span className="text-muted-foreground block text-xs">MoneyScore</span>
                           <span
                             className="font-semibold money-score-gold"
-                            data-tier={
-                              displayMain.moneyScore >= 1.2 ? "jackpot"
-                                : displayMain.moneyScore >= 1.0 ? "great"
-                                : displayMain.moneyScore >= 0.8 ? "good"
-                                : "normal"
-                            }
+                            data-tier={getMoneyScoreTier(displayMain.moneyScore)}
                           >
                             {displayMain.moneyScore.toFixed(2)}
                           </span>
@@ -815,12 +898,7 @@ function DiscoveryContent() {
                               <span>MoneyScore{" "}
                                 <strong
                                   className="money-score-gold"
-                                  data-tier={
-                                    sub.moneyScore >= 1.2 ? "jackpot"
-                                      : sub.moneyScore >= 1.0 ? "great"
-                                      : sub.moneyScore >= 0.8 ? "good"
-                                      : "normal"
-                                  }
+                                  data-tier={getMoneyScoreTier(sub.moneyScore)}
                                 >
                                   {sub.moneyScore.toFixed(2)}
                                 </strong>
@@ -893,12 +971,7 @@ function DiscoveryContent() {
                                 <span>{item.totalVolume.toLocaleString()}</span>
                                 <span
                                   className="money-score-gold"
-                                  data-tier={
-                                    item.moneyScore >= 1.2 ? "jackpot"
-                                      : item.moneyScore >= 1.0 ? "great"
-                                      : item.moneyScore >= 0.8 ? "good"
-                                      : "normal"
-                                  }
+                                  data-tier={getMoneyScoreTier(item.moneyScore)}
                                 >
                                   {item.moneyScore.toFixed(2)}
                                 </span>

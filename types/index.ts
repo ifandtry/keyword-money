@@ -105,9 +105,40 @@ export interface MoneyKeywordItem {
   commercialTokens: string[];
 }
 
+export type DiscoveryRelatedKeywordDebugReason =
+  | "missing_volume_data"
+  | "missing_serp_data"
+  | "missing_volume_and_serp_data";
+
+export interface DiscoveryRelatedKeywordItem {
+  keyword: string;
+  pcVolume?: number | null;
+  mobileVolume?: number | null;
+  totalVolume?: number | null;
+  totalDocCount?: number | null;
+  moneyScore?: number | null;
+  commercialWeight?: number | null;
+  volumeWeight?: number | null;
+  finalScore?: number | null;
+  commercialTokens?: string[] | null;
+  hasVolumeData: boolean;
+  hasSerpData: boolean;
+  debugReason?: DiscoveryRelatedKeywordDebugReason;
+}
+
+export interface DiscoveryRelatedKeywordsDebug {
+  sourceCount: number;
+  volumeMappedCount: number;
+  serpAnalyzedCount: number;
+  scoredCount: number;
+  missingVolumeKeywords: string[];
+  missingSerpKeywords: string[];
+}
+
 export interface DiscoveryResponse {
   keywords: MoneyKeywordItem[];
-  relatedKeywords: MoneyKeywordItem[];
+  relatedKeywords: DiscoveryRelatedKeywordItem[];
+  relatedKeywordsDebug: DiscoveryRelatedKeywordsDebug;
   seed: string;
   analyzedAt: string;
 }
