@@ -11,7 +11,11 @@ import {
 } from "@/types";
 import { logEvent } from "@/lib/supabase/logger";
 import { createClient } from "@/lib/supabase/server";
-import { checkAndIncrementUsage } from "@/lib/usage";
+import {
+  GUEST_DISCOVERY_COOKIE,
+  checkAndIncrementGuestDiscoveryUsage,
+  checkAndIncrementUsage,
+} from "@/lib/usage";
 
 // 네이버 자동완성 연관검색어
 async function fetchAutoComplete(keyword: string): Promise<string[]> {
@@ -193,6 +197,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { keyword } = body;
+    let guestUsage: ReturnType<typeof checkAndIncrementGuestDiscoveryUsage> | null = null;
 
     if (!keyword || typeof keyword !== "string" || keyword.trim().length === 0) {
       return NextResponse.json(
@@ -215,6 +220,30 @@ export async function POST(request: NextRequest) {
         }
       } catch {
         // usage 체크 실패 시 통과 허용
+      }
+    } else {
+      guestUsage = checkAndIncrementGuestDiscoveryUsage(
+        request.cookies.get(GUEST_DISCOVERY_COOKIE)?.value
+      );
+
+      if (!guestUsage.allowed) {
+        const response = NextResponse.json(
+          {
+            error: "guest_limit",
+            plan: guestUsage.plan,
+            limit: guestUsage.limit,
+            used: guestUsage.used,
+          },
+          { status: 403 }
+        );
+
+        response.cookies.set(GUEST_DISCOVERY_COOKIE, guestUsage.cookieValue, {
+          path: "/",
+          sameSite: "lax",
+          maxAge: 60 * 60 * 24 * 30,
+        });
+
+        return response;
       }
     }
 
@@ -328,7 +357,17 @@ export async function POST(request: NextRequest) {
       user?.id
     );
 
-    return NextResponse.json(response);
+    const jsonResponse = NextResponse.json(response);
+
+    if (guestUsage) {
+      jsonResponse.cookies.set(GUEST_DISCOVERY_COOKIE, guestUsage.cookieValue, {
+        path: "/",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+
+    return jsonResponse;
   } catch (error) {
     console.error("Discovery error:", error);
     return NextResponse.json(

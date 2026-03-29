@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { logClientEvent } from "@/lib/logClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { UsageGateModal } from "@/components/UsageGateModal";
+import { useDiscoveryUsage } from "@/hooks/useDiscoveryUsage";
 import {
   Dialog,
   DialogContent,
@@ -172,6 +174,8 @@ export default function WorkspaceHome() {
   const [keyword, setKeyword] = useState("");
   const [trendingKeywords, setTrendingKeywords] = useState<string[]>(FALLBACK_KEYWORDS);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const { plan, limit, remaining, loading: usageLoading, canUse, isUnlimited } = useDiscoveryUsage();
+  const [usageGateVariant, setUsageGateVariant] = useState<"guest" | "free" | null>(null);
 
   useEffect(() => {
     fetch("/api/trending")
@@ -185,14 +189,28 @@ export default function WorkspaceHome() {
   }, []);
 
   const handleSearch = () => {
-    if (keyword.trim()) {
-      logClientEvent("home_search", { keyword: keyword.trim() });
-      router.push(`/keyword/discover?q=${encodeURIComponent(keyword.trim())}`);
+    if (!keyword.trim()) {
+      return;
     }
+
+    if (!canUse) {
+      setUsageGateVariant(plan === "guest" ? "guest" : "free");
+      return;
+    }
+
+    logClientEvent("home_search", { keyword: keyword.trim() });
+    router.push(`/keyword/discover?q=${encodeURIComponent(keyword.trim())}`);
   };
 
   return (
     <div className="max-w-4xl mx-auto">
+      <UsageGateModal
+        open={usageGateVariant !== null}
+        variant={usageGateVariant ?? "free"}
+        onClose={() => setUsageGateVariant(null)}
+        source="workspace_home"
+      />
+
       {/* 헤드라인 */}
       <section className="text-center pt-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -220,6 +238,9 @@ export default function WorkspaceHome() {
             >
               <Search className="h-4 w-4" />
               탐색
+              <span className="text-xs opacity-70">
+                {usageLoading ? "..." : isUnlimited ? "무제한" : `${remaining}/${limit}`}
+              </span>
             </Button>
           </div>
         </div>

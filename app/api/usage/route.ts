@@ -1,8 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getUsageToday } from "@/lib/usage";
+import {
+  GUEST_DISCOVERY_COOKIE,
+  getGuestUsageToday,
+  getUsageToday,
+} from "@/lib/usage";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const {
@@ -10,22 +14,15 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({
-        plan: "free" as const,
-        discovery: { used: 0, limit: 10 },
-        analysis: { used: 0, limit: 10 },
-        production: { used: 0, limit: 0 },
-      });
+      const guestUsage = getGuestUsageToday(
+        request.cookies.get(GUEST_DISCOVERY_COOKIE)?.value
+      );
+      return NextResponse.json(guestUsage);
     }
 
     const usage = await getUsageToday(user.id);
     return NextResponse.json(usage);
   } catch {
-    return NextResponse.json({
-      plan: "free" as const,
-      discovery: { used: 0, limit: 10 },
-      analysis: { used: 0, limit: 10 },
-      production: { used: 0, limit: 0 },
-    });
+    return NextResponse.json(getGuestUsageToday(undefined));
   }
 }

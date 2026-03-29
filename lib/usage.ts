@@ -6,6 +6,14 @@ import {
   UsageCheckResult,
 } from "@/types";
 
+export const UNLIMITED_LIMIT = 999999;
+export const GUEST_DISCOVERY_COOKIE = "keywordmoney_guest_discovery_usage";
+
+type GuestUsageRecord = {
+  date: string;
+  count: number;
+};
+
 const ACTION_COLUMN: Record<ActionType, string> = {
   discovery: "discovery_count",
   analysis: "analysis_count",
@@ -19,8 +27,81 @@ function db(): any {
 
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
   .split(",")
-  .map((e) => e.trim().toLowerCase())
+  .map((e: string) => e.trim().toLowerCase())
   .filter(Boolean);
+
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function parseGuestUsage(raw: string | undefined): GuestUsageRecord {
+  const today = getToday();
+
+  if (!raw) {
+    return { date: today, count: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<GuestUsageRecord>;
+    if (parsed.date !== today) {
+      return { date: today, count: 0 };
+    }
+
+    const count =
+      typeof parsed.count === "number" && Number.isFinite(parsed.count)
+        ? Math.max(0, Math.floor(parsed.count))
+        : 0;
+
+    return { date: today, count };
+  } catch {
+    return { date: today, count: 0 };
+  }
+}
+
+function stringifyGuestUsage(record: GuestUsageRecord): string {
+  return JSON.stringify(record);
+}
+
+export function getGuestUsageToday(rawCookie: string | undefined) {
+  const record = parseGuestUsage(rawCookie);
+
+  return {
+    plan: "guest" as const,
+    discovery: { used: record.count, limit: PLAN_LIMITS.free.discovery },
+    analysis: { used: 0, limit: PLAN_LIMITS.free.analysis },
+    production: { used: 0, limit: PLAN_LIMITS.free.production },
+  };
+}
+
+export function checkAndIncrementGuestDiscoveryUsage(rawCookie: string | undefined) {
+  const record = parseGuestUsage(rawCookie);
+  const limit = PLAN_LIMITS.free.discovery;
+
+  if (record.count >= limit) {
+    return {
+      allowed: false,
+      plan: "guest" as const,
+      used: record.count,
+      limit,
+      remaining: 0,
+      cookieValue: stringifyGuestUsage(record),
+    };
+  }
+
+  const nextRecord = {
+    date: record.date,
+    count: record.count + 1,
+  };
+
+  return {
+    allowed: true,
+    plan: "guest" as const,
+    used: nextRecord.count,
+    limit,
+    remaining: limit - nextRecord.count,
+    cookieValue: stringifyGuestUsage(nextRecord),
+  };
+}
 
 async function isAdmin(userId: string): Promise<boolean> {
   const { data } = await db().auth.admin.getUserById(userId);
@@ -56,13 +137,13 @@ export async function checkAndIncrementUsage(
   action: ActionType
 ): Promise<UsageCheckResult> {
   if (await isAdmin(userId)) {
-    return { allowed: true, plan: "pro", used: 0, limit: 999999, remaining: 999999 };
+    return { allowed: true, plan: "pro", used: 0, limit: UNLIMITED_LIMIT, remaining: UNLIMITED_LIMIT };
   }
 
   const plan = await getUserPlan(userId);
   const limit = PLAN_LIMITS[plan][action];
   const column = ACTION_COLUMN[action];
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
 
   const { data: existing } = await db()
     .from("usage_daily")
@@ -112,14 +193,14 @@ export async function getUsageToday(userId: string) {
   if (await isAdmin(userId)) {
     return {
       plan: "pro" as PlanType,
-      discovery: { used: 0, limit: 999999 },
-      analysis: { used: 0, limit: 999999 },
-      production: { used: 0, limit: 999999 },
+      discovery: { used: 0, limit: UNLIMITED_LIMIT },
+      analysis: { used: 0, limit: UNLIMITED_LIMIT },
+      production: { used: 0, limit: UNLIMITED_LIMIT },
     };
   }
 
   const plan = await getUserPlan(userId);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getToday();
 
   const { data } = await db()
     .from("usage_daily")

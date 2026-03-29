@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stepper } from "@/components/Stepper";
-import { useUsageLimit } from "@/hooks/useUsageLimit";
+import { useDiscoveryUsage } from "@/hooks/useDiscoveryUsage";
 import {
   BlogReference,
   DiscoveryRelatedKeywordItem,
@@ -16,7 +16,7 @@ import {
   MoneyKeywordItem,
   TrendingCategory,
 } from "@/types";
-import { ReviewProgramModal } from "@/components/ReviewProgramModal";
+import { UsageGateModal } from "@/components/UsageGateModal";
 import {
   Dialog,
   DialogContent,
@@ -170,8 +170,8 @@ function DiscoveryContent() {
   const [overrideSubs, setOverrideSubs] = useState<MoneyKeywordItem[] | null>(null);
   const [changeTarget, setChangeTarget] = useState<"main" | number | null>(null); // null=닫힘, "main"=메인, 0~2=서브 인덱스
 
-  const { remaining, canUse, increment } = useUsageLimit();
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  const { plan, limit, remaining, loading: usageLoading, canUse, refresh, isUnlimited } = useDiscoveryUsage();
+  const [usageGateVariant, setUsageGateVariant] = useState<"guest" | "free" | null>(null);
 
   useEffect(() => {
     fetch("/api/trending")
@@ -191,10 +191,8 @@ function DiscoveryContent() {
         toast.error("키워드를 입력해주세요.");
         return;
       }
-      if (!canUse()) {
-        toast.error(
-          "일일 사용 한도를 초과했습니다. 내일 다시 시도해주세요."
-        );
+      if (!canUse) {
+        setUsageGateVariant(plan === "guest" ? "guest" : "free");
         return;
       }
 
@@ -217,9 +215,16 @@ function DiscoveryContent() {
 
         if (!res.ok) {
           const err = await res.json();
-          if (res.status === 403 && err.error === "paywall") {
-            setShowReviewModal(true);
+          if (res.status === 403 && err.error === "guest_limit") {
+            setUsageGateVariant("guest");
             setLoading(false);
+            await refresh();
+            return;
+          }
+          if (res.status === 403 && err.error === "paywall") {
+            setUsageGateVariant("free");
+            setLoading(false);
+            await refresh();
             return;
           }
           throw new Error(err.error || "탐색 실패");
@@ -227,14 +232,14 @@ function DiscoveryContent() {
 
         const result: DiscoveryResponse = await res.json();
         setData(result);
-        increment();
+        await refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "알 수 없는 오류");
       } finally {
         setLoading(false);
       }
     },
-    [keyword, canUse, increment]
+    [keyword, canUse, plan, refresh]
   );
 
   useEffect(() => {
@@ -399,9 +404,10 @@ function DiscoveryContent() {
 
   return (
     <main className="bg-background min-h-screen">
-      <ReviewProgramModal
-        open={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
+      <UsageGateModal
+        open={usageGateVariant !== null}
+        variant={usageGateVariant ?? "free"}
+        onClose={() => setUsageGateVariant(null)}
         source="discovery"
       />
       <Toaster richColors />
@@ -434,7 +440,7 @@ function DiscoveryContent() {
                     <Search className="h-4 w-4" />
                     탐색
                     <span className="text-xs opacity-70">
-                      {remaining}/5
+                      {usageLoading ? "..." : isUnlimited ? "무제한" : `${remaining}/${limit}`}
                     </span>
                   </>
                 )}

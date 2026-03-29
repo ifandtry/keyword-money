@@ -190,7 +190,7 @@ export interface PlanLimits {
 }
 
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
-  free: { discovery: 10, analysis: 10, production: 0 },
+  free: { discovery: 5, analysis: 10, production: 0 },
   basic: { discovery: 999999, analysis: 999999, production: 10 },
   pro: { discovery: 999999, analysis: 999999, production: 100 },
 };
