@@ -11,6 +11,21 @@ function simpleHash(str: string): number {
   return Math.abs(hash);
 }
 
+function normalizeKeyword(keyword: string): string {
+  return keyword.trim();
+}
+
+function uniqueKeywordsByTrim(keywords: string[]): string[] {
+  const seen = new Set<string>();
+
+  return keywords.filter((keyword) => {
+    const normalizedKeyword = normalizeKeyword(keyword);
+    if (!normalizedKeyword || seen.has(normalizedKeyword)) return false;
+    seen.add(normalizedKeyword);
+    return true;
+  });
+}
+
 // ── 네이버 검색광고 API Provider ──
 
 function generateSignature(
@@ -86,6 +101,14 @@ class NaverAdsVolumeProvider implements VolumeProvider {
     }
   }
 
+  async getExactVolumes(keywords: string[]): Promise<VolumeData[]> {
+    const exactMatches = await Promise.all(
+      uniqueKeywordsByTrim(keywords).map((keyword) => this.findExactVolume(keyword))
+    );
+
+    return exactMatches.filter((item): item is VolumeData => item !== null);
+  }
+
   private async fetchKeywordTool(seed: string): Promise<VolumeData[]> {
     const path = "/keywordstool";
     const method = "GET";
@@ -145,6 +168,52 @@ class NaverAdsVolumeProvider implements VolumeProvider {
     });
   }
 
+  private async findExactVolume(keyword: string): Promise<VolumeData | null> {
+    const targetKeyword = normalizeKeyword(keyword);
+    if (!targetKeyword) return null;
+
+    const lookupSeeds = this.buildLookupSeeds(targetKeyword);
+
+    for (const seed of lookupSeeds) {
+      const results = await this.fetchKeywordTool(seed);
+      const exactMatch = results.find(
+        (item) => normalizeKeyword(item.keyword) === targetKeyword
+      );
+
+      if (exactMatch) {
+        return {
+          ...exactMatch,
+          keyword: targetKeyword,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private buildLookupSeeds(keyword: string): string[] {
+    const seeds = [keyword];
+
+    if (!keyword.includes(" ")) {
+      return seeds;
+    }
+
+    const noSpace = keyword.replace(/\s+/g, "");
+    if (normalizeKeyword(noSpace) && !seeds.includes(noSpace)) {
+      seeds.push(noSpace);
+    }
+
+    const words = keyword.split(/\s+/).filter((word) => word.length > 0);
+    if (words.length > 0) {
+      const coreWord = words.reduce((a, b) => (a.length >= b.length ? a : b));
+      if (coreWord && !seeds.includes(coreWord)) {
+        seeds.push(coreWord);
+      }
+    }
+
+    return seeds;
+  }
+
   private parseCount(value: number | string): number {
     if (typeof value === "number") return value;
     if (value === "< 10") return 5;
@@ -188,6 +257,27 @@ class MockVolumeProvider implements VolumeProvider {
         cpc: 100 + (simpleHash(keyword + "_cpc") % 2900),
       };
     });
+  }
+
+  async getExactVolumes(keywords: string[]): Promise<VolumeData[]> {
+    return keywords
+      .map((keyword) => normalizeKeyword(keyword))
+      .filter((keyword) => keyword.length > 0)
+      .map((keyword) => {
+        const total =
+          Math.round((500 + (simpleHash(keyword) % 9500)) / 10) * 10;
+        const mobileRatio = 0.6 + (simpleHash(keyword + "_mr") % 26) / 100;
+        const mobileVolume = Math.round((total * mobileRatio) / 10) * 10;
+        const pcVolume = total - mobileVolume;
+
+        return {
+          keyword,
+          pcVolume,
+          mobileVolume,
+          totalVolume: total,
+          cpc: 100 + (simpleHash(keyword + "_cpc") % 2900),
+        };
+      });
   }
 }
 

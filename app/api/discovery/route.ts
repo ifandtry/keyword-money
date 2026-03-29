@@ -239,24 +239,29 @@ export async function POST(request: NextRequest) {
       .filter((kw) => !autoCompleteKeywordSet.has(normalizeKeywordForMatch(kw)))
       .slice(0, 30);
 
-    // 연관검색어 중 광고 API에 없는 것만 추려서 검색량 보강
+    // 자동완성/AI 탐색 키워드의 검색량 맵 구성
     const volumeMap = new Map(
       volumeData.map((v) => [normalizeKeywordForMatch(v.keyword), v])
     );
+
     const acOnly = uniqueKeywordsByTrim(acKeywords).filter(
       (kw) => !volumeMap.has(normalizeKeywordForMatch(kw))
     );
+    const adsOnly = adsKeywords.filter(
+      (kw) => !volumeMap.has(normalizeKeywordForMatch(kw))
+    );
 
-    // 누락된 자동완성 키워드를 5개씩 배치로 검색량 조회
-    for (let i = 0; i < acOnly.length; i += 5) {
-      const batch = acOnly.slice(i, i + 5);
-      const batchResults = await Promise.all(
-        batch.map((kw) => volumeProvider.getVolume([kw]))
-      );
-      for (const results of batchResults) {
-        for (const v of results) {
-          const normalizedKeyword = normalizeKeywordForMatch(v.keyword);
-          if (!volumeMap.has(normalizedKeyword)) volumeMap.set(normalizedKeyword, v);
+    const exactVolumeKeywords = uniqueKeywordsByTrim([...acOnly, ...adsOnly]);
+
+    // exact 검색량 조회로 자동완성/AI 탐색 누락분 보강
+    for (let i = 0; i < exactVolumeKeywords.length; i += 10) {
+      const batch = exactVolumeKeywords.slice(i, i + 10);
+      const exactVolumes = await volumeProvider.getExactVolumes(batch);
+
+      for (const volume of exactVolumes) {
+        const normalizedKeyword = normalizeKeywordForMatch(volume.keyword);
+        if (!volumeMap.has(normalizedKeyword)) {
+          volumeMap.set(normalizedKeyword, volume);
         }
       }
     }

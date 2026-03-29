@@ -52,6 +52,7 @@ export interface SerpData {
 
 export interface VolumeProvider {
   getVolume(keywords: string[]): Promise<VolumeData[]>;
+  getExactVolumes(keywords: string[]): Promise<VolumeData[]>;
 }
 
 export interface SerpProvider {
