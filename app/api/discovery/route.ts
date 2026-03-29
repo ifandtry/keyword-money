@@ -53,6 +53,10 @@ function normalizeKeywordForMatch(keyword: string): string {
   return keyword.trim();
 }
 
+function normalizeKeywordWithoutSpaces(keyword: string): string {
+  return keyword.replace(/\s+/g, "").trim();
+}
+
 function uniqueKeywordsByTrim(keywords: string[]): string[] {
   const seen = new Set<string>();
 
@@ -251,11 +255,41 @@ export async function POST(request: NextRequest) {
       (kw) => !volumeMap.has(normalizeKeywordForMatch(kw))
     );
 
-    const exactVolumeKeywords = uniqueKeywordsByTrim([...acOnly, ...adsOnly]);
+    // 자동완성 키워드는 공백 제거 버전으로만 검색량 조회 후 원문 키워드에 매핑
+    const autoCompleteLookupMap = new Map<string, string[]>();
+    for (const keyword of acOnly) {
+      const lookupKeyword = normalizeKeywordWithoutSpaces(keyword);
+      if (!lookupKeyword) continue;
 
-    // exact 검색량 조회로 자동완성/AI 탐색 누락분 보강
-    for (let i = 0; i < exactVolumeKeywords.length; i += 10) {
-      const batch = exactVolumeKeywords.slice(i, i + 10);
+      const mappedKeywords = autoCompleteLookupMap.get(lookupKeyword) ?? [];
+      mappedKeywords.push(keyword);
+      autoCompleteLookupMap.set(lookupKeyword, mappedKeywords);
+    }
+
+    const autoCompleteLookupKeywords = Array.from(autoCompleteLookupMap.keys());
+    for (let i = 0; i < autoCompleteLookupKeywords.length; i += 10) {
+      const batch = autoCompleteLookupKeywords.slice(i, i + 10);
+      const exactVolumes = await volumeProvider.getExactVolumes(batch);
+
+      for (const volume of exactVolumes) {
+        const lookupKeyword = normalizeKeywordWithoutSpaces(volume.keyword);
+        const originalKeywords = autoCompleteLookupMap.get(lookupKeyword) ?? [];
+
+        for (const originalKeyword of originalKeywords) {
+          const normalizedOriginalKeyword = normalizeKeywordForMatch(originalKeyword);
+          if (!volumeMap.has(normalizedOriginalKeyword)) {
+            volumeMap.set(normalizedOriginalKeyword, {
+              ...volume,
+              keyword: originalKeyword,
+            });
+          }
+        }
+      }
+    }
+
+    // AI 탐색 키워드는 기존 exact 검색량 조회 유지
+    for (let i = 0; i < adsOnly.length; i += 10) {
+      const batch = adsOnly.slice(i, i + 10);
       const exactVolumes = await volumeProvider.getExactVolumes(batch);
 
       for (const volume of exactVolumes) {
