@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
     const requestId = createApiRequestId();
     const usageContext = {
-      feature: "analysis",
+      feature: "analyze",
       requestId,
       userId: user?.id,
     };
