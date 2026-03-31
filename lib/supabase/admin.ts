@@ -1,7 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Supabase DB 스키마 타입 (자동 생성 대신 수동 정의)
-interface Database {
+export interface Database {
   public: {
     Tables: {
       profiles: {
@@ -104,6 +104,53 @@ interface Database {
           metadata: Record<string, unknown>;
         }>;
       };
+      api_usage_logs: {
+        Row: {
+          id: number;
+          created_at: string;
+          provider: string;
+          feature: string;
+          user_id: string | null;
+          request_id: string;
+          model: string | null;
+          input_tokens: number;
+          output_tokens: number;
+          total_tokens: number;
+          estimated_cost_krw: number;
+          status: string;
+          latency_ms: number | null;
+          meta_json: Record<string, unknown>;
+        };
+        Insert: {
+          created_at?: string;
+          provider: string;
+          feature: string;
+          user_id?: string | null;
+          request_id: string;
+          model?: string | null;
+          input_tokens?: number;
+          output_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_krw?: number;
+          status?: string;
+          latency_ms?: number | null;
+          meta_json?: Record<string, unknown>;
+        };
+        Update: Partial<{
+          provider: string;
+          feature: string;
+          user_id: string | null;
+          request_id: string;
+          model: string | null;
+          input_tokens: number;
+          output_tokens: number;
+          total_tokens: number;
+          estimated_cost_krw: number;
+          status: string;
+          latency_ms: number | null;
+          meta_json: Record<string, unknown>;
+        }>;
+      };
       blog_views: {
         Row: {
           slug: string;
@@ -131,9 +178,9 @@ interface Database {
   };
 }
 
-let _admin: ReturnType<typeof createClient<Database>> | null = null;
+let _admin: SupabaseClient<Database> | null = null;
 
-export function getAdminClient() {
+export function getAdminClient(): SupabaseClient<Database> {
   if (!_admin) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

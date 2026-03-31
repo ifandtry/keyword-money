@@ -1,4 +1,9 @@
 import { VolumeData, VolumeProvider } from "@/types";
+import {
+  type ApiUsageContext,
+  getProviderRequestCostKrw,
+  logApiUsage,
+} from "@/lib/supabase/apiUsageLogger";
 import crypto from "crypto";
 
 function simpleHash(str: string): number {
@@ -58,11 +63,18 @@ class NaverAdsVolumeProvider implements VolumeProvider {
   private apiKey: string;
   private secretKey: string;
   private baseUrl = "https://api.searchad.naver.com";
+  private usageContext?: ApiUsageContext;
 
-  constructor(customerId: string, apiKey: string, secretKey: string) {
+  constructor(
+    customerId: string,
+    apiKey: string,
+    secretKey: string,
+    usageContext?: ApiUsageContext
+  ) {
     this.customerId = customerId;
     this.apiKey = apiKey;
     this.secretKey = secretKey;
+    this.usageContext = usageContext;
   }
 
   /**
@@ -127,45 +139,71 @@ class NaverAdsVolumeProvider implements VolumeProvider {
 
     const url = `${this.baseUrl}${path}?${params.toString()}`;
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "X-Timestamp": timestamp,
-        "X-API-KEY": this.apiKey,
-        "X-Customer": this.customerId,
-        "X-Signature": signature,
-      },
-    });
+    const startedAt = Date.now();
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `Naver Ads API error (${response.status}):`,
-        errorText
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "X-Timestamp": timestamp,
+          "X-API-KEY": this.apiKey,
+          "X-Customer": this.customerId,
+          "X-Signature": signature,
+        },
+      });
+
+      const latencyMs = Date.now() - startedAt;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        await this.logUsage(`http_${response.status}`, latencyMs, {
+          endpoint: path,
+          seed,
+          http_status: response.status,
+          error_text: errorText.slice(0, 500),
+        });
+        console.error(
+          `Naver Ads API error (${response.status}):`,
+          errorText
+        );
+        return [];
+      }
+
+      const data = await response.json();
+      const keywordList: NaverKeywordResult[] = data.keywordList || [];
+
+      await this.logUsage("success", latencyMs, {
+        endpoint: path,
+        seed,
+        http_status: response.status,
+        keyword_count: keywordList.length,
+      });
+
+      console.log(
+        `[NaverAds] Seed "${seed}" → ${keywordList.length} keywords returned`
       );
-      return [];
+
+      return keywordList.map((item) => {
+        const pcVol = this.parseCount(item.monthlyPcQcCnt);
+        const mobileVol = this.parseCount(item.monthlyMobileQcCnt);
+        const cpc = this.estimateCpc(item);
+
+        return {
+          keyword: item.relKeyword,
+          pcVolume: pcVol,
+          mobileVolume: mobileVol,
+          totalVolume: pcVol + mobileVol,
+          cpc,
+        };
+      });
+    } catch (error) {
+      await this.logUsage("error", Date.now() - startedAt, {
+        endpoint: path,
+        seed,
+        error_message: error instanceof Error ? error.message : "unknown_error",
+      });
+      throw error;
     }
-
-    const data = await response.json();
-    const keywordList: NaverKeywordResult[] = data.keywordList || [];
-
-    console.log(
-      `[NaverAds] Seed "${seed}" → ${keywordList.length} keywords returned`
-    );
-
-    return keywordList.map((item) => {
-      const pcVol = this.parseCount(item.monthlyPcQcCnt);
-      const mobileVol = this.parseCount(item.monthlyMobileQcCnt);
-      const cpc = this.estimateCpc(item);
-
-      return {
-        keyword: item.relKeyword,
-        pcVolume: pcVol,
-        mobileVolume: mobileVol,
-        totalVolume: pcVol + mobileVol,
-        cpc,
-      };
-    });
   }
 
   private async findExactVolume(keyword: string): Promise<VolumeData | null> {
@@ -237,6 +275,25 @@ class NaverAdsVolumeProvider implements VolumeProvider {
 
     return Math.round(baseCpc);
   }
+
+  private async logUsage(
+    status: string,
+    latencyMs: number,
+    metaJson: Record<string, unknown>
+  ) {
+    if (!this.usageContext) return;
+
+    await logApiUsage({
+      provider: "naver_ads",
+      feature: this.usageContext.feature,
+      requestId: this.usageContext.requestId,
+      userId: this.usageContext.userId,
+      estimatedCostKrw: getProviderRequestCostKrw("naver_ads"),
+      status,
+      latencyMs,
+      metaJson,
+    });
+  }
 }
 
 // ── Mock Provider (fallback) ──
@@ -283,14 +340,14 @@ class MockVolumeProvider implements VolumeProvider {
 
 // ── Factory ──
 
-export function createVolumeProvider(): VolumeProvider {
+export function createVolumeProvider(usageContext?: ApiUsageContext): VolumeProvider {
   const customerId = process.env.NAVER_ADS_CUSTOMER_ID;
   const apiKey = process.env.NAVER_ADS_API_KEY;
   const secretKey = process.env.NAVER_ADS_SECRET_KEY;
 
   if (customerId && apiKey && secretKey) {
     console.log("[VolumeProvider] Using Naver Ads API");
-    return new NaverAdsVolumeProvider(customerId, apiKey, secretKey);
+    return new NaverAdsVolumeProvider(customerId, apiKey, secretKey, usageContext);
   }
 
   console.log("[VolumeProvider] Using Mock (no Naver Ads credentials)");

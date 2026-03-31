@@ -5,6 +5,12 @@ import { createSerpProvider } from "@/lib/providers/serpProvider";
 import { calculateProfitScore } from "@/lib/scoring/profitScore";
 import { KeywordItem, TitleSuggestion, BlogTitleAnalysis } from "@/types";
 import { logEvent, calcOpenAICost } from "@/lib/supabase/logger";
+import {
+  calcOpenAICostKrw,
+  createApiRequestId,
+  runLoggedOpenAICall,
+} from "@/lib/supabase/apiUsageLogger";
+import { createClient } from "@/lib/supabase/server";
 
 // 네이버 블로그 URL에서 blogId 추출
 function extractBlogId(link: string): string | null {
@@ -108,6 +114,11 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const requestId = createApiRequestId();
     const body = await request.json();
     const {
       selectedKeyword,
@@ -124,9 +135,19 @@ export async function POST(request: NextRequest) {
     const mainKw = selectedKeyword.keyword;
     console.log(`[Refresh] Main keyword: ${mainKw}`);
 
+    const usageContext = {
+      feature: "extract_refresh",
+      requestId,
+      userId: user?.id,
+    };
+    let analysisUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+    };
+
     // === Step 1: 선택한 메인 키워드로 서브 키워드 갱신 (네이버 광고 API → SERP → 수익점수) ===
-    const volumeProvider = createVolumeProvider();
-    const serpProvider = createSerpProvider();
+    const volumeProvider = createVolumeProvider(usageContext);
+    const serpProvider = createSerpProvider(usageContext);
 
     // 네이버 광고 API: 메인 키워드를 시드로 연관 키워드 + 검색량 조회
     const volumeData = await volumeProvider.getVolume([mainKw]);
@@ -165,7 +186,7 @@ export async function POST(request: NextRequest) {
       const subKeywordMap = new Map(subKeywords.map((s) => [s.keyword, s]));
       const needAnalysis = acKeywords.filter((kw) => !subKeywordMap.has(kw) && !volumeMap.has(kw));
 
-      let acAnalyzedMap = new Map<string, KeywordItem>();
+      const acAnalyzedMap = new Map<string, KeywordItem>();
       // 이미 volumeData에 있는 자동완성 키워드는 재사용
       for (const kw of acKeywords) {
         if (subKeywordMap.has(kw)) {
@@ -284,12 +305,22 @@ export async function POST(request: NextRequest) {
             };
 
             const [analysisResult, statsResults] = await Promise.all([
-              openai.chat.completions.create({
+              runLoggedOpenAICall({
+                feature: "extract_refresh",
+                requestId,
+                userId: user?.id,
                 model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "user",
-                    content: `당신은 네이버 블로그 SEO 전문가입니다.
+                metaJson: {
+                  step: "top_blog_analysis",
+                  keyword: mainKw,
+                  blog_item_count: cleanItems.length,
+                },
+                execute: () => openai.chat.completions.create({
+                  model: "gpt-4o-mini",
+                  messages: [
+                    {
+                      role: "user",
+                      content: `당신은 네이버 블로그 SEO 전문가입니다.
 
 "${mainKw}" 키워드로 네이버 검색 시 상위에 노출되는 블로그 글들입니다:
 
@@ -305,10 +336,11 @@ ${blogTitleListFull}
     { "clickScore": 75, "analysis": "분석 내용" }
   ]
 }`,
-                  },
-                ],
-                response_format: { type: "json_object" },
-                temperature: 0.5,
+                    },
+                  ],
+                  response_format: { type: "json_object" },
+                  temperature: 0.5,
+                }),
               }),
               Promise.all(
                 cleanItems.map(async (t) => {
@@ -324,6 +356,11 @@ ${blogTitleListFull}
                 })
               ),
             ]);
+
+            analysisUsage = {
+              prompt_tokens: analysisResult.usage?.prompt_tokens ?? 0,
+              completion_tokens: analysisResult.usage?.completion_tokens ?? 0,
+            };
 
             const analysisContent = analysisResult.choices[0]?.message?.content;
             if (analysisContent) {
@@ -363,12 +400,22 @@ ${blogTitleListFull}
       ? `\n## 현재 네이버 상위 노출 제목 (참고용)\n${topBlogTitleList}\n`
       : "";
 
-    const titleResult = await openai.chat.completions.create({
+    const titleResult = await runLoggedOpenAICall({
+      feature: "extract_refresh",
+      requestId,
+      userId: user?.id,
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `당신은 네이버 블로그 SEO 전문가입니다.
+      metaJson: {
+        step: "title_generation",
+        main_keyword: mainKw,
+        sub_keyword_count: subKeywords.length,
+      },
+      execute: () => openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: `당신은 네이버 블로그 SEO 전문가입니다.
 
 ## 원래 블로그 글 주제
 ${description}
@@ -380,8 +427,7 @@ ${mainKw} (검색량: ${selectedKeyword.totalVolume.toLocaleString()}, 수익점
 ${subSummary}
 ${topTitlesRef}
 ## 요구사항
-선택한 메인 키워드와 서브 키워드를 활용하여 수익성이 높은 블로그 제목 5개를 추천하세요.
-- 메인 키워드를 반드시 제목에 포함
+선택한 메인 키워드를 반드시 제목에 포함
 - 네이버 상위 노출 제목의 패턴(키워드 배치, 후기/추천/비교 등의 포맷)을 참고하되, 그대로 베끼지 말고 차별화된 제목을 만들 것
 - 각 제목에 클릭점수(0~100)와 수익성이 좋은 이유를 구체적으로 제공
 
@@ -391,10 +437,11 @@ ${topTitlesRef}
     { "title": "제목", "clickScore": 85, "reason": "이유" }
   ]
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      }),
     });
 
     const titleContent = titleResult.choices[0]?.message?.content;
@@ -405,14 +452,20 @@ ${topTitlesRef}
     }
 
     const totalTokens = {
-      prompt_tokens: (titleResult.usage?.prompt_tokens ?? 0),
-      completion_tokens: (titleResult.usage?.completion_tokens ?? 0),
+      prompt_tokens:
+        analysisUsage.prompt_tokens +
+        (titleResult.usage?.prompt_tokens ?? 0),
+      completion_tokens:
+        analysisUsage.completion_tokens +
+        (titleResult.usage?.completion_tokens ?? 0),
     };
     logEvent("extract_refresh", {
       main_keyword: mainKw,
+      api_request_id: requestId,
       openai_tokens: totalTokens.prompt_tokens + totalTokens.completion_tokens,
       openai_cost_usd: calcOpenAICost(totalTokens),
-    });
+      openai_cost_krw: calcOpenAICostKrw(totalTokens),
+    }, user?.id);
 
     console.log(`[Refresh] Done! Titles: ${titles.length}, Blogs: ${topBlogTitles.length}, Subs: ${subKeywords.length}, AC: ${autoCompleteKeywords.length}`);
     return NextResponse.json({ titles, topBlogTitles, subKeywords, autoCompleteKeywords });

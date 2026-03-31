@@ -1,4 +1,9 @@
 import { SerpData, SerpProvider } from "@/types";
+import {
+  type ApiUsageContext,
+  getProviderRequestCostKrw,
+  logApiUsage,
+} from "@/lib/supabase/apiUsageLogger";
 
 function simpleHash(str: string): number {
   let hash = 0;
@@ -15,29 +20,6 @@ const COMMERCIAL_PATTERNS = [
   "최저가", "쿠폰", "브랜드", "리뷰", "사용기", "효과", "성분",
 ];
 
-// ── 네이버 검색 OpenAPI로 총문서수 조회 ──
-
-async function fetchBlogTotal(
-  keyword: string,
-  clientId: string,
-  clientSecret: string
-): Promise<number> {
-  const params = new URLSearchParams({ query: keyword, display: "1" });
-  const res = await fetch(
-    `https://openapi.naver.com/v1/search/blog.json?${params.toString()}`,
-    {
-      headers: {
-        "X-Naver-Client-Id": clientId,
-        "X-Naver-Client-Secret": clientSecret,
-      },
-    }
-  );
-
-  if (!res.ok) return 0;
-  const data = await res.json();
-  return data.total || 0;
-}
-
 // ── 네이버 SERP 크롤링 + 검색 API Provider ──
 
 class NaverSerpProvider implements SerpProvider {
@@ -46,11 +28,17 @@ class NaverSerpProvider implements SerpProvider {
   private clientId: string;
   private clientSecret: string;
   private hasSearchApi: boolean;
+  private usageContext?: ApiUsageContext;
 
-  constructor(clientId?: string, clientSecret?: string) {
+  constructor(
+    clientId?: string,
+    clientSecret?: string,
+    usageContext?: ApiUsageContext
+  ) {
     this.clientId = clientId || "";
     this.clientSecret = clientSecret || "";
     this.hasSearchApi = !!(clientId && clientSecret);
+    this.usageContext = usageContext;
   }
 
   async analyze(keywords: string[]): Promise<SerpData[]> {
@@ -58,7 +46,7 @@ class NaverSerpProvider implements SerpProvider {
     const results: SerpData[] = [];
 
     // 네이버 검색 API로 전체 키워드 총문서수 조회 (5개씩 batch, API 있을 때만)
-    let docCounts: Map<string, number> = new Map();
+    const docCounts: Map<string, number> = new Map();
     if (this.hasSearchApi) {
       const BATCH_SIZE = 5;
       for (let i = 0; i < keywords.length; i += BATCH_SIZE) {
@@ -66,7 +54,7 @@ class NaverSerpProvider implements SerpProvider {
         const counts = await Promise.all(
           batch.map(async (kw) => {
             try {
-              const total = await fetchBlogTotal(kw, this.clientId, this.clientSecret);
+              const total = await this.fetchBlogTotal(kw);
               return { keyword: kw, total };
             } catch {
               return { keyword: kw, total: 0 };
@@ -102,6 +90,64 @@ class NaverSerpProvider implements SerpProvider {
     return results;
   }
 
+  private async fetchBlogTotal(keyword: string): Promise<number> {
+    const params = new URLSearchParams({ query: keyword, display: "1" });
+    const url = `https://openapi.naver.com/v1/search/blog.json?${params.toString()}`;
+    const startedAt = Date.now();
+
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "X-Naver-Client-Id": this.clientId,
+          "X-Naver-Client-Secret": this.clientSecret,
+        },
+      });
+
+      const latencyMs = Date.now() - startedAt;
+
+      if (!res.ok) {
+        await this.logUsage(
+          `http_${res.status}`,
+          latencyMs,
+          {
+            endpoint: "/v1/search/blog.json",
+            keyword,
+            http_status: res.status,
+          },
+          getProviderRequestCostKrw("naver_search")
+        );
+        return 0;
+      }
+
+      const data = await res.json();
+      await this.logUsage(
+        "success",
+        latencyMs,
+        {
+          endpoint: "/v1/search/blog.json",
+          keyword,
+          http_status: res.status,
+          total: data.total || 0,
+        },
+        getProviderRequestCostKrw("naver_search")
+      );
+
+      return data.total || 0;
+    } catch (error) {
+      await this.logUsage(
+        "error",
+        Date.now() - startedAt,
+        {
+          endpoint: "/v1/search/blog.json",
+          keyword,
+          error_message: error instanceof Error ? error.message : "unknown_error",
+        },
+        getProviderRequestCostKrw("naver_search")
+      );
+      throw error;
+    }
+  }
+
   private async crawlKeyword(keyword: string, totalDocCount: number): Promise<SerpData> {
     const params = new URLSearchParams({
       where: "blog",
@@ -109,34 +155,61 @@ class NaverSerpProvider implements SerpProvider {
       sm: "tab_jum",
     });
     const url = `https://search.naver.com/search.naver?${params.toString()}`;
+    const startedAt = Date.now();
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": this.userAgent,
-        "Accept-Language": "ko-KR,ko;q=0.9",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": this.userAgent,
+          "Accept-Language": "ko-KR,ko;q=0.9",
+          Accept: "text/html,application/xhtml+xml",
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const latencyMs = Date.now() - startedAt;
+
+      if (!response.ok) {
+        await this.logUsage(`http_${response.status}`, latencyMs, {
+          endpoint: "/search.naver",
+          keyword,
+          http_status: response.status,
+        });
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const html = await response.text();
+      const blogRatio = this.analyzeBlogRatio(html);
+      const commercialIntent = this.analyzeCommercialIntent(keyword, html);
+      const competition = this.analyzeCompetition(keyword, html);
+
+      await this.logUsage("success", latencyMs, {
+        endpoint: "/search.naver",
+        keyword,
+        blog_ratio: blogRatio,
+        commercial_intent: commercialIntent,
+        competition,
+      });
+
+      console.log(`[SERP] "${keyword}" → docs=${totalDocCount.toLocaleString()}, blogRatio=${blogRatio}, comp=${competition}`);
+
+      return {
+        keyword,
+        totalDocCount,
+        blogPostCount: 0,
+        blogRatio,
+        commercialIntent,
+        competition,
+      };
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith("HTTP "))) {
+        await this.logUsage("error", Date.now() - startedAt, {
+          endpoint: "/search.naver",
+          keyword,
+          error_message: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+      throw error;
     }
-
-    const html = await response.text();
-    const blogRatio = this.analyzeBlogRatio(html);
-    const commercialIntent = this.analyzeCommercialIntent(keyword, html);
-    const competition = this.analyzeCompetition(keyword, html);
-
-    console.log(`[SERP] "${keyword}" → docs=${totalDocCount.toLocaleString()}, blogRatio=${blogRatio}, comp=${competition}`);
-
-    return {
-      keyword,
-      totalDocCount,
-      blogPostCount: 0,
-      blogRatio,
-      commercialIntent,
-      competition,
-    };
   }
 
   private analyzeBlogRatio(html: string): number {
@@ -206,6 +279,26 @@ class NaverSerpProvider implements SerpProvider {
       competition: Number(((hash % 70) / 100 + 0.1).toFixed(2)),
     };
   }
+
+  private async logUsage(
+    status: string,
+    latencyMs: number,
+    metaJson: Record<string, unknown>,
+    estimatedCostKrw = 0
+  ) {
+    if (!this.usageContext) return;
+
+    await logApiUsage({
+      provider: "naver_search",
+      feature: this.usageContext.feature,
+      requestId: this.usageContext.requestId,
+      userId: this.usageContext.userId,
+      estimatedCostKrw,
+      status,
+      latencyMs,
+      metaJson,
+    });
+  }
 }
 
 // ── Mock Provider (fallback) ──
@@ -230,7 +323,7 @@ class MockSerpProvider implements SerpProvider {
 
 // ── Factory ──
 
-export function createSerpProvider(): SerpProvider {
+export function createSerpProvider(usageContext?: ApiUsageContext): SerpProvider {
   const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
   const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
 
@@ -245,5 +338,5 @@ export function createSerpProvider(): SerpProvider {
     console.log("[SerpProvider] Using Naver SERP Crawler (no Search API keys)");
   }
 
-  return new NaverSerpProvider(clientId, clientSecret);
+  return new NaverSerpProvider(clientId, clientSecret, usageContext);
 }

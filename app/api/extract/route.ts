@@ -5,6 +5,12 @@ import { createSerpProvider } from "@/lib/providers/serpProvider";
 import { calculateProfitScore } from "@/lib/scoring/profitScore";
 import { ExtractResponse, KeywordItem, VolumeData, BlogTitleAnalysis } from "@/types";
 import { logEvent, calcOpenAICost } from "@/lib/supabase/logger";
+import {
+  calcOpenAICostKrw,
+  createApiRequestId,
+  runLoggedOpenAICall,
+} from "@/lib/supabase/apiUsageLogger";
+import { createClient } from "@/lib/supabase/server";
 
 // 네이버 블로그 URL에서 blogId 추출
 function extractBlogId(link: string): string | null {
@@ -85,7 +91,6 @@ async function fetchPostStats(
   }
 }
 
-
 // 네이버 자동완성 연관검색어 가져오기
 async function fetchAutoComplete(keyword: string): Promise<string[]> {
   try {
@@ -118,6 +123,11 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const requestId = createApiRequestId();
 
     const body = await request.json();
     const { description } = body;
@@ -130,15 +140,33 @@ export async function POST(request: NextRequest) {
     }
 
     const desc = description.trim();
+    const usageContext = {
+      feature: "extract",
+      requestId,
+      userId: user?.id,
+    };
+    let blogAnalysisUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+    };
 
     // Step 1: GPT로 넓은 시드 키워드 추출 (2~4글자 짧은 핵심어)
     console.log("[Extract] Step 1: Extracting seed keywords...");
-    const extractCompletion = await openai.chat.completions.create({
+    const extractCompletion = await runLoggedOpenAICall({
+      feature: "extract",
+      requestId,
+      userId: user?.id,
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `당신은 네이버 블로그 SEO 전문가입니다.
+      metaJson: {
+        step: "seed_extraction",
+        description_length: desc.length,
+      },
+      execute: () => openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: `당신은 네이버 블로그 SEO 전문가입니다.
 아래 블로그 글 설명에서 네이버 검색량이 높을 만한 **핵심 시드 키워드**를 추출하세요.
 
 ## 블로그 글 설명
@@ -155,10 +183,11 @@ ${desc}
 {
   "seeds": ["시드1", "시드2", "시드3"]
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      }),
     });
 
     const extractContent = extractCompletion.choices[0]?.message?.content;
@@ -176,7 +205,7 @@ ${desc}
 
     // Step 2: 각 시드로 네이버 광고 API 호출 → 연관 키워드 + 검색량 수집
     console.log("[Extract] Step 2: Fetching related keywords from Naver Ads API...");
-    const volumeProvider = createVolumeProvider();
+    const volumeProvider = createVolumeProvider(usageContext);
     const allVolumeMap = new Map<string, VolumeData>();
 
     for (let i = 0; i < seeds.length; i++) {
@@ -211,7 +240,7 @@ ${desc}
 
     // Step 4: SERP 분석 (네이버 검색 API + 크롤링)
     console.log("[Extract] Step 3: Analyzing SERP...");
-    const serpProvider = createSerpProvider();
+    const serpProvider = createSerpProvider(usageContext);
     const serpData = await serpProvider.analyze(keywordsToAnalyze);
 
     // Step 5: 수익점수 계산
@@ -240,12 +269,21 @@ ${desc}
       )
       .join("\n");
 
-    const selectionCompletion = await openai.chat.completions.create({
+    const selectionCompletion = await runLoggedOpenAICall({
+      feature: "extract",
+      requestId,
+      userId: user?.id,
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `당신은 네이버 블로그 SEO 전문가입니다.
+      metaJson: {
+        step: "keyword_selection",
+        analyzed_item_count: analyzedItems.length,
+      },
+      execute: () => openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: `당신은 네이버 블로그 SEO 전문가입니다.
 
 ## 원래 블로그 글 주제
 ${desc}
@@ -271,10 +309,11 @@ ${keywordSummary}
   "mainKeywordCandidates": ["후보1", "후보2", "후보3"],
   "subKeywords": ["서브1", "서브2"]
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      }),
     });
 
     const selectionContent = selectionCompletion.choices[0]?.message?.content;
@@ -329,7 +368,7 @@ ${keywordSummary}
     if (acKeywords.length > 0) {
       // 이미 분석된 키워드는 재사용, 나머지는 새로 분석
       const needAnalysis = acKeywords.filter((kw) => !analyzedMap.has(kw));
-      let acAnalyzedMap = new Map<string, KeywordItem>();
+      const acAnalyzedMap = new Map<string, KeywordItem>();
 
       if (needAnalysis.length > 0) {
         const acVolumeData = await volumeProvider.getVolume([needAnalysis[0]]);
@@ -418,12 +457,22 @@ ${keywordSummary}
             };
 
             const [blogAnalysisResult, blogStatsResults] = await Promise.all([
-              openai.chat.completions.create({
+              runLoggedOpenAICall({
+                feature: "extract",
+                requestId,
+                userId: user?.id,
                 model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "user",
-                    content: `당신은 네이버 블로그 SEO 전문가입니다.
+                metaJson: {
+                  step: "top_blog_analysis",
+                  keyword: mainKeywordForSearch.keyword,
+                  blog_item_count: cleanItems.length,
+                },
+                execute: () => openai.chat.completions.create({
+                  model: "gpt-4o-mini",
+                  messages: [
+                    {
+                      role: "user",
+                      content: `당신은 네이버 블로그 SEO 전문가입니다.
 
 "${mainKeywordForSearch.keyword}" 키워드로 네이버 검색 시 상위에 노출되는 블로그 글들입니다:
 
@@ -439,10 +488,11 @@ ${blogTitleListFull}
     { "clickScore": 75, "analysis": "분석 내용" }
   ]
 }`,
-                  },
-                ],
-                response_format: { type: "json_object" },
-                temperature: 0.5,
+                    },
+                  ],
+                  response_format: { type: "json_object" },
+                  temperature: 0.5,
+                }),
               }),
               Promise.all(
                 cleanItems.map(async (t) => {
@@ -458,6 +508,11 @@ ${blogTitleListFull}
                 })
               ),
             ]);
+
+            blogAnalysisUsage = {
+              prompt_tokens: blogAnalysisResult.usage?.prompt_tokens ?? 0,
+              completion_tokens: blogAnalysisResult.usage?.completion_tokens ?? 0,
+            };
 
             const blogAnalysisContent = blogAnalysisResult.choices[0]?.message?.content;
             if (blogAnalysisContent) {
@@ -498,12 +553,22 @@ ${blogTitleListFull}
       ? `\n## 현재 네이버 상위 노출 제목 (참고용)\n${topBlogTitleList}\n`
       : "";
 
-    const titleCompletion = await openai.chat.completions.create({
+    const titleCompletion = await runLoggedOpenAICall({
+      feature: "extract",
+      requestId,
+      userId: user?.id,
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `당신은 네이버 블로그 SEO 전문가입니다.
+      metaJson: {
+        step: "title_generation",
+        main_keyword: mainKeywordForSearch.keyword,
+        sub_keyword_count: subKeywordItems.length,
+      },
+      execute: () => openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: `당신은 네이버 블로그 SEO 전문가입니다.
 
 ## 원래 블로그 글 주제
 ${desc}
@@ -527,10 +592,11 @@ ${topTitlesRef}
     { "title": "제목", "clickScore": 85, "reason": "이유" }
   ]
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+      }),
     });
 
     const titleContent = titleCompletion.choices[0]?.message?.content;
@@ -555,17 +621,21 @@ ${topTitlesRef}
       prompt_tokens:
         (extractCompletion.usage?.prompt_tokens ?? 0) +
         (selectionCompletion.usage?.prompt_tokens ?? 0) +
+        blogAnalysisUsage.prompt_tokens +
         (titleCompletion.usage?.prompt_tokens ?? 0),
       completion_tokens:
         (extractCompletion.usage?.completion_tokens ?? 0) +
         (selectionCompletion.usage?.completion_tokens ?? 0) +
+        blogAnalysisUsage.completion_tokens +
         (titleCompletion.usage?.completion_tokens ?? 0),
     };
     logEvent("extract", {
       description: desc.slice(0, 100),
+      api_request_id: requestId,
       openai_tokens: totalTokens.prompt_tokens + totalTokens.completion_tokens,
       openai_cost_usd: calcOpenAICost(totalTokens),
-    });
+      openai_cost_krw: calcOpenAICostKrw(totalTokens),
+    }, user?.id);
 
     console.log(`[Extract] Done! Main candidates: ${mainKeywordCandidates.map((c) => c.keyword).join(", ")}, Subs: ${subKeywordItems.length}`);
     return NextResponse.json(response);

@@ -9,6 +9,7 @@ import {
   DiscoveryResponse,
   MoneyKeywordItem,
 } from "@/types";
+import { createApiRequestId } from "@/lib/supabase/apiUsageLogger";
 import { logEvent } from "@/lib/supabase/logger";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -247,9 +248,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const requestId = createApiRequestId();
     const seed = keyword.trim();
-    const volumeProvider = createVolumeProvider();
-    const serpProvider = createSerpProvider();
+    const usageContext = {
+      feature: "discovery",
+      requestId,
+      userId: user?.id,
+    };
+    const volumeProvider = createVolumeProvider(usageContext);
+    const serpProvider = createSerpProvider(usageContext);
 
     // 1: 네이버 자동완성 + 광고 API 동시 호출
     const [acKeywords, volumeData] = await Promise.all([
@@ -353,7 +360,11 @@ export async function POST(request: NextRequest) {
 
     logEvent(
       "discovery",
-      { keyword: seed, result_count: adsScored.length + relatedKeywords.length },
+      {
+        keyword: seed,
+        result_count: adsScored.length + relatedKeywords.length,
+        api_request_id: requestId,
+      },
       user?.id
     );
 

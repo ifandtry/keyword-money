@@ -4,7 +4,9 @@ import { createSerpProvider } from "@/lib/providers/serpProvider";
 import { generateRelatedKeywords } from "@/lib/providers/relatedKeywords";
 import { calculateProfitScore } from "@/lib/scoring/profitScore";
 import { AnalyzeResponse, KeywordItem } from "@/types";
+import { createApiRequestId } from "@/lib/supabase/apiUsageLogger";
 import { logEvent } from "@/lib/supabase/logger";
+import { createClient } from "@/lib/supabase/server";
 
 // 네이버 자동완성 연관검색어 가져오기
 async function fetchAutoComplete(keyword: string): Promise<string[]> {
@@ -40,10 +42,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const requestId = createApiRequestId();
+    const usageContext = {
+      feature: "analysis",
+      requestId,
+      userId: user?.id,
+    };
+
     const seed = keyword.trim();
 
-    const volumeProvider = createVolumeProvider();
-    const serpProvider = createSerpProvider();
+    const volumeProvider = createVolumeProvider(usageContext);
+    const serpProvider = createSerpProvider(usageContext);
 
     // 1단계: 네이버 광고 API에 시드 키워드 전달 → 연관키워드 + 검색량 한번에 수신
     const volumeData = await volumeProvider.getVolume([seed]);
@@ -142,7 +155,11 @@ export async function POST(request: NextRequest) {
       analyzedAt: new Date().toISOString(),
     };
 
-    logEvent("analyze", { keyword: seed, result_count: relatedItems.length });
+    logEvent("analyze", {
+      keyword: seed,
+      result_count: relatedItems.length,
+      api_request_id: requestId,
+    }, user?.id);
 
     return NextResponse.json(response);
   } catch (error) {

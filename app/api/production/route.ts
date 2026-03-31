@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { ProductionResponse } from "@/types";
 import { logEvent, calcOpenAICost } from "@/lib/supabase/logger";
+import {
+  calcOpenAICostKrw,
+  createApiRequestId,
+  runLoggedOpenAICall,
+} from "@/lib/supabase/apiUsageLogger";
 import { createClient } from "@/lib/supabase/server";
 import { checkAndIncrementUsage } from "@/lib/usage";
 
@@ -37,6 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const requestId = createApiRequestId();
     const body = await request.json();
     const { mainKeyword, subKeywords } = body;
 
@@ -51,12 +57,21 @@ export async function POST(request: NextRequest) {
     const subList = subs.map((kw) => `- ${kw}`).join("\n");
 
     // 제목 10개 + 글 개요를 한번의 LLM 호출로 생성 (비용 최소화)
-    const completion = await openai.chat.completions.create({
+    const completion = await runLoggedOpenAICall({
+      feature: "production",
+      requestId,
+      userId: user.id,
       model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `당신은 네이버 블로그 SEO 및 수익화 전문가입니다.
+      metaJson: {
+        main_keyword: mainKeyword,
+        sub_keyword_count: subs.length,
+      },
+      execute: () => openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: `당신은 네이버 블로그 SEO 및 수익화 전문가입니다.
 
 ## 메인 키워드
 ${mainKeyword}
@@ -90,10 +105,11 @@ ${subList}
     ]
   }
 }`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.8,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8,
+      }),
     });
 
     const content = completion.choices[0]?.message?.content;
@@ -125,8 +141,10 @@ ${subList}
     logEvent("production", {
       main_keyword: mainKeyword,
       sub_keywords: subs.join(", "),
+      api_request_id: requestId,
       openai_tokens: totalTokens.prompt_tokens + totalTokens.completion_tokens,
       openai_cost_usd: calcOpenAICost(totalTokens),
+      openai_cost_krw: calcOpenAICostKrw(totalTokens),
     }, user?.id);
 
     return NextResponse.json(response);
